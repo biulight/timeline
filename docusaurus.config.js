@@ -10,7 +10,7 @@ const config = {
   title: 'biulight Site',
   tagline: '持续记录学习',
   url: 'https://your-docusaurus-test-site.com',
-  baseUrl: './',
+  baseUrl: '/blog/',
   onBrokenLinks: 'throw',
   onBrokenMarkdownLinks: 'warn',
   favicon: 'img/favicon.ico',
