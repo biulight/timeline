@@ -47,7 +47,7 @@ jobs:
           # 要上传文件所在目录
           SOURCE: "build/*"
           # 远程服务器目标路径
-          TARGET: "/root/www/timeline"
+          TARGET: "/var/www/timeline"
   # 部署任务
   deploy:
     # Add a dependency to the build job
