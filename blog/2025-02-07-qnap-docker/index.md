@@ -36,9 +36,9 @@ SSH 服务的默认端口是 22，上述命令是 用户通过 SSH 工具用账�
 sudo vim /share/CACHEDEV1_DATA/.qpkg/container-station/etc/docker.json
 ```
 
-增加代理配置如下
+增加代理配置
 
-```json
+```json title="/share/CACHEDEV1_DATA/.qpkg/container-station/etc/docker.json"
 {
   // 新增配置
   "proxies": {
@@ -81,9 +81,9 @@ docker info
 sudo vim /share/CACHEDEV1_DATA/.qpkg/container-station/etc/docker.json
 ```
 
-增加镜像源配置如下
+增加镜像源配置
 
-```json
+```json title="/share/CACHEDEV1_DATA/.qpkg/container-station/etc/docker.json"
 {
   // 新增配置
   "registry-mirrors": [
@@ -93,7 +93,7 @@ sudo vim /share/CACHEDEV1_DATA/.qpkg/container-station/etc/docker.json
 }
 ```
 
-:::tip
+:::info
 腾讯云镜像加速器地址：https://mirror.ccs.tencentyun.com
 
 中国科学技术大学：https://docker.mirrors.ustc.edu.cn
