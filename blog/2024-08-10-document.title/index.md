@@ -6,6 +6,8 @@ tags: [Web, Supervisory control]
 
 埋点监控 SDK `ENTER` 事件怎样获取到页面标题？
 
+<!--truncate-->
+
 ## 背景
 
 使用 `window.onload`、`hashchange` 事件获取 `document.title` 时，某些场景出现异常，值为空
