@@ -4,11 +4,13 @@ authors: biulight
 tags: [Linux, Ubuntu, Neovim]
 ---
 
-Ubuntu 怎样安装指定版本的Neovim?
+Ubuntu 怎样安装指定版本的 Neovim?
+
+<!--truncate-->
 
 ## 背景
 
-由于apt中只有Neovim(v0.72)的安装包。想使用新版需要自己安装
+由于 apt 中只有 Neovim(v0.72)的安装包。想使用新版需要自己安装
 
 > 以 `v0.9.5` 版本为例
 

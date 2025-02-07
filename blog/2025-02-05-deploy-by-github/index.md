@@ -4,8 +4,9 @@ authors: biulight
 tags: [Linux, Ubuntu, Deploy, GitHub, CI/CD]
 ---
 
-怎样通过Github自动交付前端编译产物？
+怎样通过 Github 自动交付前端编译产物？
 
+<!--truncate-->
 
 ## 准备
 
@@ -19,7 +20,7 @@ tags: [Linux, Ubuntu, Deploy, GitHub, CI/CD]
 
 :::tip
 遵循权限最小化原则，创建 `deploy001-timeline` 用户，用于部署
-若已存在 `deploy` 用户组，跳过**步骤1**，直接新建指定项目部署用户
+若已存在 `deploy` 用户组，跳过**步骤 1**，直接新建指定项目部署用户
 :::
 
 ```bash
@@ -28,11 +29,13 @@ cat /etc/group | grep xxx
 ```
 
 1. 创建用户组
+
 ```bash
 sudo addgroup deploy
 ```
 
 2. 创建用户
+
 ```bash
 sudo adduser --ingroup deploy deploy001-timeline
 ```
@@ -44,6 +47,7 @@ sudo chown deploy001-timeline:deploy /path/to/folder
 ```
 
 4. 更新目录权限
+
 ```bash
 sudo chmod 755 /path/to/folder
 ```
@@ -69,6 +73,7 @@ su deploy001-timeline
 ```
 
 2. 生成非对称密钥
+
 ```bash
 ssh-keygen -m PEM -t rsa -b 4096 -f deploy001-timeline -C "deploy001-timeline"
 ```
@@ -81,27 +86,30 @@ cat deploy001-timeline.pub
 # 编辑 authorized_keys 文件，并把复制的结果粘贴到此文件
 vim ~/.ssh/authorized_keys
 ```
+
 :::tip
-vim 是linux常用的终端编辑器，常见命令如下
+vim 是 linux 常用的终端编辑器，常见命令如下
+
 1. `:wq` 保存并退出
 2. `i` 进入输入视图
-:::
+   :::
 
 #### Github 配置
 
-配置 `secrets` 变量，在workflow中使用
+配置 `secrets` 变量，在 workflow 中使用
 
 - `ALY_USER`: deploy001-timeline
 - `ALY_HOST`: 服务器域名
-- `ALY_SSH_TOKEN`: deploy001-timeline文件内容
+- `ALY_SSH_TOKEN`: deploy001-timeline 文件内容
 
 :::tip
 查看 `deploy001-timeline`文件, 可在终端输入 `cat deploy001-timeline`
 :::
 
-#### workflow配置
+#### workflow 配置
 
 **example:**
+
 ```yml
 name: Deployment
 # 触发脚本的条件，develop分支push代码的时候
@@ -154,19 +162,20 @@ jobs:
           TARGET: "/var/www/timeline"
 ```
 
-
 ## 补充
 
-### NGINX配置
+### NGINX 配置
 
 以访问 `http://blog.biulight.cn/timeline` 能显示 `/var/www/timeline` 目录内容为例
 
 :::tip
-1. 通常，Nginx的虚拟主机配置位于`/etc/nginx/sites-available/`目录下。如果已经有针对`timeline`的配置文件，可以直接编辑它；否则，创建一个新的配置文件。
-2. 启用配置文件，需要在 `/etc/nginx/sites-enabled/`目录下有对应配置文件的映射。
-:::
 
-1. 新增配置文件
+1. 通常，Nginx 的虚拟主机配置位于`/etc/nginx/sites-available/`目录下。如果已经有针对`timeline`的配置文件，可以直接编辑它；否则，创建一个新的配置文件。
+2. 启用配置文件，需要在 `/etc/nginx/sites-enabled/`目录下有对应配置文件的映射。
+   :::
+
+3. 新增配置文件
+
 ```nginx
 server {
     listen 80;
@@ -181,17 +190,21 @@ server {
 ```
 
 2. 启用配置文件
+
 ```bash
 # 建立软连接，启用新增的配置文件
 ln -s /etc/nginx/sites-available/timeline /etc/nginx/sites-enabled/timeline
 ```
 
 3. 测试配置文件
+
 ```bash
 # 修改完配置后，运行以下命令检查语法是否正确
 sudo nginx -t
 ```
-4. 重新加载Nginx服务
+
+4. 重新加载 Nginx 服务
+
 ```bash
 # 如果测试通过，重新加载Nginx以应用更改：
 sudo systemctl reload nginx
@@ -200,7 +213,7 @@ sudo systemctl reload nginx
 ### 使用 `Let's Encrypt` 证书
 
 :::tip
-ubuntu安装查看[certbot](https://certbot.eff.org/instructions?ws=nginx&os=snap)官方文档
+ubuntu 安装查看[certbot](https://certbot.eff.org/instructions?ws=nginx&os=snap)官方文档
 :::
 
 使用**certbot**自动生成证书
