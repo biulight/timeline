@@ -27,7 +27,9 @@ ssh -p 22 username@192.168.0.155
 
 :::tip
 SSH 服务的默认端口是 22，上述命令是 用户通过 SSH 工具用账号（username）连接到服务器（192.168.0.155）的 22 端口
-::: 2. 增加 docker 的代理配置
+:::
+
+2. 增加 docker 的代理配置
 
 ```bash
 # 编辑配置文件
@@ -49,7 +51,9 @@ sudo vim /share/CACHEDEV1_DATA/.qpkg/container-station/etc/docker.json
 
 :::tip
 ssh 登录后，可以通过 `which docker`、`whereis docker` 查看 docker 所在位置
-::: 3. 重启 docker 服务
+:::
+
+3. 重启 docker 服务
 
 ```bash
 sudo /etc/init.d/container-station.sh restart
@@ -68,7 +72,7 @@ docker info
 
 ### 更换国内镜像源
 
-> 参考“使用代理”，增加镜像源配置
+> 参考**使用代理**，增加镜像源配置
 
 步骤 1、2 参考[使用代理](#使用代理)
 
