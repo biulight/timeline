@@ -20,7 +20,7 @@ jobs:
       # 安装node
       - name: create build environments
         # 使用action库 actions/setup-node 安装node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: 22.18.0
       # 安装依赖
