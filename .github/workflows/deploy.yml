@@ -16,7 +16,7 @@ jobs:
       # 获取源码
       - name: pull code
         # 使用action库  actions/checkout获取源码
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       # 安装node
       - name: create build environments
         # 使用action库 actions/setup-node 安装node
