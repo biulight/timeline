@@ -36,7 +36,7 @@ jobs:
           path: build/
       # 上传打包文件到远程服务器
       - name: ssh deploy
-        uses: easingthemes/ssh-deploy@v2.2.11
+        uses: easingthemes/ssh-deploy@v5.1.1
         env:
           REMOTE_USER: ${{secrets.ALY_USER}}
           REMOTE_HOST: ${{secrets.ALY_HOST}}
