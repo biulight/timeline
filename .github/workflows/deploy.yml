@@ -31,7 +31,7 @@ jobs:
         run: npm run build
       - name: Upload static files as artifact
         id: deployment
-        uses: actions/upload-pages-artifact@v3 # or specific "vX.X.X" version tag for this action
+        uses: actions/upload-pages-artifact@v4 # or specific "vX.X.X" version tag for this action
         with:
           path: build/
       # 上传打包文件到远程服务器
