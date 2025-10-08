@@ -66,7 +66,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Deploy to GitHub Pages
-        if: inputs.deploy_target === 'prod'
+        if: inputs.deploy_target == 'prod'
         id: deploy_pages
         uses: actions/deploy-pages@v4
       - name: Download build artifact for SSH deploy
