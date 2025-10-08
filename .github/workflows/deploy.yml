@@ -53,7 +53,7 @@ jobs:
           SOURCE: "build/*"
           TARGET: "/var/www/timeline"
       - name: Checkout code for tagging
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Create tag
