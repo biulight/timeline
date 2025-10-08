@@ -61,13 +61,12 @@ jobs:
       contents: write  # tag + release + merge
       pull-requests: write
     environment:
-      name: github-pages
+      name: ${{ inputs.deploy_target }}
       url: ${{ steps.deploy_pages.outputs.page_url }}
-    env:
-      env_var: ${{ inputs.deploy_target }}
     runs-on: ubuntu-latest
     steps:
       - name: Deploy to GitHub Pages
+        if: inputs.deploy_target === 'prod'
         id: deploy_pages
         uses: actions/deploy-pages@v4
       - name: Download build artifact for SSH deploy
