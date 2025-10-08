@@ -1,45 +1,108 @@
 name: Deployment
-# 触发脚本的条件，develop分支push代码的时候
 on:
   push:
     branches:
       - release
-# 要执行的任务
+
 jobs:
-  # 任务名称
   build:
-    # runs-on 指定job任务运行所需要的虚拟机环境（必填）
-    # runs-on: self-hosted
     runs-on: ubuntu-latest
-    # 任务步骤
     steps:
-      # 获取源码
-      - name: pull code
-        # 使用action库  actions/checkout获取源码
-        uses: actions/checkout@v3
-      # 安装node
-      - name: create build environments
-        # 使用action库 actions/setup-node 安装node
-        uses: actions/setup-node@v3
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Node
+        uses: actions/setup-node@v5
         with:
-          node-version: 16.16.0
-      # 安装依赖
-      - name: install
+          node-version: 22.18.0
+      - name: Install deps
         run: npm install
-      # 打包
-      - name: build
+      - name: Build
         run: npm run build
-      # 上传打包文件到远程服务器
-      - name: ssh deploy
-        uses: easingthemes/ssh-deploy@v2.2.11
+      - name: Upload static files as artifact
+        id: pages_artifact
+        uses: actions/upload-pages-artifact@v4 # or specific "vX.X.X" version tag for this action
+        with:
+          path: build/
+      - name: Upload build artifact (for SSH deploy)
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-dist
+          path: build/
+
+  deploy:
+    needs: build
+    permissions:
+      pages: write
+      id-token: write
+      contents: write  # tag + release + merge
+      pull-requests: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy_pages.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deploy_pages
+        uses: actions/deploy-pages@v4
+      - name: Download build artifact for SSH deploy
+        uses: actions/download-artifact@v4
+        with:
+          name: build-dist
+          path: build
+      - name: SSH deploy to server
+        uses: easingthemes/ssh-deploy@v5.1.1
         env:
-          REMOTE_USER: ${{secrets.ALY_USER}}
-          REMOTE_HOST: ${{secrets.ALY_HOST}}
+          REMOTE_USER: ${{ secrets.ALY_USER }}
+          REMOTE_HOST: ${{ secrets.ALY_HOST }}
           REMOTE_PORT: "22"
           ARGS: "-rltgoDzvO --delete"
-          SSH_PRIVATE_KEY: ${{secrets.ALY_SSH_TOKEN}}
-          # SSH_PRIVATE_KEY: ${{secrets.VITETEST}}
-          # 要上传文件所在目录
-          SOURCE: "dist/*"
-          # 远程服务器目标路径
-          TARGET: "/root/www/blog"
+          SSH_PRIVATE_KEY: ${{ secrets.ALY_SSH_TOKEN }}
+          SOURCE: "build/*"
+          TARGET: "/var/www/timeline"
+      - name: Checkout code for tagging
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Create tag
+        id: create_tag
+        run: |
+          set -e
+          TAG="v$(date +%Y%m%d-%H%M%S)-${GITHUB_RUN_NUMBER}"
+          echo "TAG_NAME=$TAG" >> $GITHUB_ENV
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git tag "$TAG" "$GITHUB_SHA"
+          git push origin "$TAG"
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          release_name: ${{ env.TAG_NAME }}
+          body: Automated release
+          draft: false
+          prerelease: false
+      - name: Create PR to merge into main
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const branch = process.env.GITHUB_REF_NAME; // current release branch
+            const { data: existing } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              head: `${context.repo.owner}:${branch}`,
+              base: 'main'
+            });
+            if (existing.length) { core.info(`PR already exists: #${existing[0].number}`); return; }
+            const { data: pr } = await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              head: branch,
+              base: 'main',
+              title: `chore: merge ${branch} into main (auto after deploy)`,
+              body: 'Auto-created by CI after successful deploy.'
+            });
+            core.notice(`Created PR #${pr.number}`);
