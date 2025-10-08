@@ -1,0 +1,31 @@
+[git]
+conventional_commits = true
+filter_unconventional = false
+tag_pattern = "^v"
+
+[cli]
+# remove the leading "Changelog" header when using --strip header
+# produce markdown
+
+[changelog]
+header = ""
+body = "{{#each releases}}
+{{#if not (eq @index 0)}}---\n{{/if}}
+## {{version}} ({{date}})\n
+{{#if commits}}\n{{#each commits}}
+- {{message}} ({{hash}})\n{{/each}}{{/if}}
+{{/each}}"
+footer = ""
+
+[commit_types]
+feat = { title = "Features" }
+fix = { title = "Bug Fixes" }
+perf = { title = "Performance" }
+refactor = { title = "Refactoring" }
+docs = { title = "Documentation" }
+style = { title = "Style" }
+test = { title = "Tests" }
+chore = { title = "Chores" }
+
+[replacements]
+# example: { "BREAKING CHANGE:" = "**BREAKING:**" }
