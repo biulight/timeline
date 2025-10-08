@@ -157,23 +157,12 @@ jobs:
       - name: Generate changelog
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
         id: gen_changelog
-        run: |
-          set -e
-          TAG="$TAG_NAME"
-          # Find previous tag (excluding current one)
-          PREV_TAG=$(git tag --sort=-creatordate | sed -n '2p') || true
-          if [ -z "$PREV_TAG" ]; then
-            echo "No previous tag; using full history"
-            git log --pretty=format:'* %s (%h)' > CHANGELOG.md
-          else
-            git log "$PREV_TAG..$TAG" --pretty=format:'* %s (%h)' > CHANGELOG.md
-          fi
-          if [ ! -s CHANGELOG.md ]; then
-            echo '* No changes' > CHANGELOG.md
-          fi
-          echo "changelog<<EOF" >> $GITHUB_OUTPUT
-          cat CHANGELOG.md >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+        uses: orhun/git-cliff-action@v3
+        with:
+          config: ./git-cliff.toml
+          args: --current-tag ${{ env.TAG_NAME }} --strip header --no-exec
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 
       - name: Create GitHub Release
@@ -216,3 +205,17 @@ jobs:
               body: 'Auto-created by CI after successful deploy.'
             });
             core.notice(`Created PR #${pr.number}`);
+
+
+
+
+
+
+
+
+
+
+
+
+
+# git-cliff config (basic). Adjust sections/types as needed.
