@@ -44,7 +44,7 @@ jobs:
         id: deploy_pages
         uses: actions/deploy-pages@v4
       - name: Download build artifact for SSH deploy
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: build-dist
           path: build
