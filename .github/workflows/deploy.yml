@@ -171,9 +171,9 @@ jobs:
           if [ ! -s CHANGELOG.md ]; then
             echo '* No changes' > CHANGELOG.md
           fi
-          echo "CHANGELOG<<'EOF'" >> $GITHUB_ENV
+          echo "CHANGELOG<<EOF" >> $GITHUB_ENV
           cat CHANGELOG.md >> $GITHUB_ENV
-          echo 'EOF' >> $GITHUB_ENV
+          echo EOF >> $GITHUB_ENV
 
 
       - name: Create GitHub Release
