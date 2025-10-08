@@ -171,9 +171,9 @@ jobs:
           if [ ! -s CHANGELOG.md ]; then
             echo '* No changes' > CHANGELOG.md
           fi
-          echo "CHANGELOG<<EOF" >> $GITHUB_ENV
-          cat CHANGELOG.md >> $GITHUB_ENV
-          echo EOF >> $GITHUB_ENV
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          cat CHANGELOG.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
 
       - name: Create GitHub Release
@@ -184,7 +184,7 @@ jobs:
         with:
           tag_name: ${{ env.TAG_NAME }}
           release_name: ${{ env.TAG_NAME }}
-          body: ${{ env.CHANGELOG }}
+          body: ${{ steps.gen_changelog.outputs.changelog }}
           draft: false
           prerelease: false
 
