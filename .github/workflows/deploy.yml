@@ -63,6 +63,8 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deploy_pages.outputs.page_url }}
+    env:
+      env_var: ${{ inputs.deploy_target }}
     runs-on: ubuntu-latest
     steps:
       - name: Deploy to GitHub Pages
@@ -76,13 +78,13 @@ jobs:
       - name: SSH deploy to server
         uses: easingthemes/ssh-deploy@v5.1.1
         env:
-          REMOTE_USER: ${{ secrets.ALY_USER }}
-          REMOTE_HOST: ${{ secrets.ALY_HOST }}
+          REMOTE_USER: ${{ vars.ALY_USER }}
+          REMOTE_HOST: ${{ vars.ALY_HOST }}
           REMOTE_PORT: "22"
           ARGS: "-rltgoDzvO --delete"
           SSH_PRIVATE_KEY: ${{ secrets.ALY_SSH_TOKEN }}
           SOURCE: "build/*"
-          TARGET: "/var/www/${{ inputs.deploy_target }}"
+          TARGET: "/var/www/timeline"
       - name: Checkout code for tagging
         uses: actions/checkout@v4
         with:
