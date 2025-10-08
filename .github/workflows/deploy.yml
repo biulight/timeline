@@ -143,6 +143,7 @@ jobs:
           fetch-depth: 0
 
       - name: Create tag
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
         id: create_tag
         run: |
           set -e
@@ -154,6 +155,7 @@ jobs:
           git push origin "$TAG"
 
       - name: Create GitHub Release
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
