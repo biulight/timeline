@@ -36,6 +36,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       ready: ${{ steps.check.outputs.ready }}
+    environment:
+      name: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target || 'dev' }}
     steps:
       - name: Check required secrets and variables
         id: check
