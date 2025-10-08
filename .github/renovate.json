@@ -1,0 +1,13 @@
+{
+  "extends": ["config:base"],
+  "baseBranch": "develop",
+  "branchPrefix": "renovate/",
+  "automerge": true,
+  "automergeType": "pr",
+  "packageRules": [
+    {
+      "matchPackagePatterns": ["^@my-org/"],
+      "automerge": false
+    }
+  ]
+}
