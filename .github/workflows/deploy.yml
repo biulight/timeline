@@ -1,5 +1,21 @@
 name: Deployment
 on:
+  workflow_dispatch:
+    inputs:
+      deploy_target:
+        description: 'Environment'
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - uat
+          - prod
+      node_version:
+        description: 'Node.js version'
+        required: false
+        default: '22.18.0'
+        type: string
   push:
     branches:
       - release
@@ -7,13 +23,21 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    environment: ${{ inputs.deploy_target }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: 22.18.0
+          node-version: ${{ inputs.node_version }}
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ inputs.node_version }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
       - name: Install deps
         run: npm install
       - name: Build
@@ -58,7 +82,7 @@ jobs:
           ARGS: "-rltgoDzvO --delete"
           SSH_PRIVATE_KEY: ${{ secrets.ALY_SSH_TOKEN }}
           SOURCE: "build/*"
-          TARGET: "/var/www/timeline"
+          TARGET: "/var/www/${{ inputs.deploy_target }}"
       - name: Checkout code for tagging
         uses: actions/checkout@v4
         with:
