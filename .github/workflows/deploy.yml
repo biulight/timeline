@@ -154,6 +154,28 @@ jobs:
           git tag "$TAG" "$GITHUB_SHA"
           git push origin "$TAG"
 
+      - name: Generate changelog
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
+        id: gen_changelog
+        run: |
+          set -e
+          TAG="$TAG_NAME"
+          # Find previous tag (excluding current one)
+          PREV_TAG=$(git tag --sort=-creatordate | sed -n '2p') || true
+          if [ -z "$PREV_TAG" ]; then
+            echo "No previous tag; using full history"
+            git log --pretty=format:'* %s (%h)' > CHANGELOG.md
+          else
+            git log "$PREV_TAG..$TAG" --pretty=format:'* %s (%h)' > CHANGELOG.md
+          fi
+          if [ ! -s CHANGELOG.md ]; then
+            echo '* No changes' > CHANGELOG.md
+          fi
+          echo "CHANGELOG<<'EOF'" >> $GITHUB_ENV
+          cat CHANGELOG.md >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
+
+
       - name: Create GitHub Release
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
         uses: actions/create-release@v1
@@ -162,7 +184,7 @@ jobs:
         with:
           tag_name: ${{ env.TAG_NAME }}
           release_name: ${{ env.TAG_NAME }}
-          body: Automated release
+          body: ${{ env.CHANGELOG }}
           draft: false
           prerelease: false
 
