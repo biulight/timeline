@@ -164,7 +164,7 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
         id: gen_changelog
         run: |
-          npx git-cliff --current-tag ${{ env.TAG_NAME }} --strip header --no-exec -o CHANGELOG_TEMP.md
+          npx git-cliff --current --strip header --no-exec -o CHANGELOG_TEMP.md
           echo "changelog<<EOF" >> $GITHUB_OUTPUT
           cat CHANGELOG_TEMP.md >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
