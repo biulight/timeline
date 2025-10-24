@@ -63,7 +63,7 @@ jobs:
           fi
 
           echo "All required secrets/vars present."
-          echo "::set-output name=ready::true"
+          echo "ready=true" >> $GITHUB_OUTPUT
 
   build:
     needs: preflight
