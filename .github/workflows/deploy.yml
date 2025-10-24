@@ -154,13 +154,20 @@ jobs:
           git tag "$TAG" "$GITHUB_SHA"
           git push origin "$TAG"
 
+      - name: Setup Node for changelog
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
       - name: Generate changelog
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
         id: gen_changelog
-        uses: orhun/git-cliff-action@v3
-        with:
-          config: ./git-cliff.toml
-          args: --current-tag ${{ env.TAG_NAME }} --strip header --no-exec
+        run: |
+          npx git-cliff --current-tag ${{ env.TAG_NAME }} --strip header --no-exec -o CHANGELOG_TEMP.md
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          cat CHANGELOG_TEMP.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
