@@ -1,28 +1,106 @@
-name: Deployment
 on:
+  workflow_dispatch:
+    inputs:
+      deploy_target:
+        description: 'Environment'
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - uat
+          - prod
+      node_version:
+        description: 'Node.js version'
+        required: false
+        default: '22.18.0'
+        type: string
   push:
     branches:
       - release
 
+# 最小必要权限（根级），尽量收窄为后续步骤需要的权限
+permissions:
+  contents: write       # 推送 tag、创建 release、checkout/push 操作
+  pages: write          # deploy-pages / upload-pages-artifact
+  id-token: write       # deploy-pages 可能需要 OIDC
+  pull-requests: write  # github-script 创建 PR
+
+concurrency:
+  group: deployment-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build:
+  # 预检步骤：在任何构建/部署前检测必须的 secrets/vars 是否存在，早失败并提示缺失项
+  preflight:
     runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    environment:
+      name: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target || 'dev' }}
+    steps:
+      - name: Check required secrets and variables
+        id: check
+        run: |
+          missing=""
+          # Check SSH secret for server deploy and repo vars for host/user
+          if [ -z "${{ secrets.ALY_SSH_TOKEN }}" ]; then
+            missing="${missing} secrets.ALY_SSH_TOKEN"
+          fi
+          if [ -z "${{ vars.ALY_USER }}" ]; then
+            missing="${missing} vars.ALY_USER"
+          fi
+          if [ -z "${{ vars.ALY_HOST }}" ]; then
+            missing="${missing} vars.ALY_HOST"
+          fi
+
+          # If Pages deployment will run (only for workflow_dispatch + prod), we don't require extra secrets here.
+          # Emit helpful guidance and fail early if any required items missing.
+          if [ -n "$missing" ]; then
+            echo "Missing required configuration:$missing"
+            echo "::error::Missing required configuration:$missing"
+            exit 1
+          fi
+
+          echo "All required secrets/vars present."
+          echo "ready=true" >> $GITHUB_OUTPUT
+
+  build:
+    needs: preflight
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target || 'dev' }}
+      NODE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.node_version || '22.18.0' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
+
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: 22.18.0
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
       - name: Install deps
         run: npm install
+
       - name: Build
         run: npm run build
-      - name: Upload static files as artifact
+
+      - name: Upload static files as artifact for Pages
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
         id: pages_artifact
-        uses: actions/upload-pages-artifact@v4 # or specific "vX.X.X" version tag for this action
+        uses: actions/upload-pages-artifact@v4
         with:
           path: build/
+
       - name: Upload build artifact (for SSH deploy)
         uses: actions/upload-artifact@v4
         with:
@@ -31,39 +109,41 @@ jobs:
 
   deploy:
     needs: build
-    permissions:
-      pages: write
-      id-token: write
-      contents: write  # tag + release + merge
-      pull-requests: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy_pages.outputs.page_url }}
     runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target || 'dev' }}
+    env:
+      DEPLOY_TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target || 'dev' }}
     steps:
       - name: Deploy to GitHub Pages
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
         id: deploy_pages
         uses: actions/deploy-pages@v4
+
       - name: Download build artifact for SSH deploy
         uses: actions/download-artifact@v4
         with:
           name: build-dist
           path: build
+
       - name: SSH deploy to server
         uses: easingthemes/ssh-deploy@v5.1.1
         env:
-          REMOTE_USER: ${{ secrets.ALY_USER }}
-          REMOTE_HOST: ${{ secrets.ALY_HOST }}
+          REMOTE_USER: ${{ vars.ALY_USER }}
+          REMOTE_HOST: ${{ vars.ALY_HOST }}
           REMOTE_PORT: "22"
           ARGS: "-rltgoDzvO --delete"
           SSH_PRIVATE_KEY: ${{ secrets.ALY_SSH_TOKEN }}
           SOURCE: "build/*"
           TARGET: "/var/www/timeline"
+
       - name: Checkout code for tagging
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
+
       - name: Create tag
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
         id: create_tag
         run: |
           set -e
@@ -73,22 +153,48 @@ jobs:
           git config user.email "actions@github.com"
           git tag "$TAG" "$GITHUB_SHA"
           git push origin "$TAG"
+
+      - name: Setup Node for changelog
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Generate changelog
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
+        id: gen_changelog
+        run: |
+          npx git-cliff --current --strip header --no-exec -o CHANGELOG_TEMP.md
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          cat CHANGELOG_TEMP.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
       - name: Create GitHub Release
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ env.TAG_NAME }}
           release_name: ${{ env.TAG_NAME }}
-          body: Automated release
+          body: ${{ steps.gen_changelog.outputs.changelog }}
           draft: false
           prerelease: false
+
       - name: Create PR to merge into main
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const branch = process.env.GITHUB_REF_NAME; // current release branch
+            const ref = context.ref || '';
+            const branch = ref.replace('refs/heads/', '');
+            if (!branch) {
+              core.info('Cannot determine branch name from context.ref; skipping PR creation.');
+              return;
+            }
             const { data: existing } = await github.rest.pulls.list({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -106,3 +212,17 @@ jobs:
               body: 'Auto-created by CI after successful deploy.'
             });
             core.notice(`Created PR #${pr.number}`);
+
+
+
+
+
+
+
+
+
+
+
+
+
+# git-cliff config (basic). Adjust sections/types as needed.
