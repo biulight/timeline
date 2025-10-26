@@ -43,15 +43,14 @@ jobs:
         id: check
         run: |
           missing=""
-          # Check SSH secret for server deploy and repo vars for host/user
+          # Check SSH secret for server deploy
           if [ -z "${{ secrets.ALY_SSH_TOKEN }}" ]; then
             missing="${missing} secrets.ALY_SSH_TOKEN"
           fi
-          if [ -z "${{ vars.ALY_USER }}" ]; then
-            missing="${missing} vars.ALY_USER"
-          fi
-          if [ -z "${{ vars.ALY_HOST }}" ]; then
-            missing="${missing} vars.ALY_HOST"
+          
+          # Check DEPLOY_SERVERS variable
+          if [ -z "${{ vars.DEPLOY_SERVERS }}" ]; then
+            missing="${missing} vars.DEPLOY_SERVERS"
           fi
 
           # If Pages deployment will run (only for workflow_dispatch + prod), we don't require extra secrets here.
@@ -118,12 +117,7 @@ jobs:
       - name: Set deploy servers matrix
         id: set-matrix
         run: |
-          SERVERS='${{ vars.DEPLOY_SERVERS }}'
-          if [ -n "$SERVERS" ]; then
-            echo "servers=$SERVERS" >> $GITHUB_OUTPUT
-          else
-            echo 'servers=[{"name":"default","host":"${{ vars.ALY_HOST }}","user":"${{ vars.ALY_USER }}"}]' >> $GITHUB_OUTPUT
-          fi
+          echo "servers=${{ vars.DEPLOY_SERVERS }}" >> $GITHUB_OUTPUT
 
   deploy-pages:
     needs: build
