@@ -107,6 +107,18 @@ jobs:
           name: build-dist
           path: build/
 
+  deploy-pages:
+    needs: build
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
   deploy:
     needs: build
     runs-on: ubuntu-latest
@@ -120,11 +132,6 @@ jobs:
       matrix:
         server: ${{ fromJson(vars.DEPLOY_SERVERS || '[{"name":"default","host":"","user":""}]') }}
     steps:
-      - name: Deploy to GitHub Pages
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
-        id: deploy_pages
-        uses: actions/deploy-pages@v4
-
       - name: Download build artifact for SSH deploy
         uses: actions/download-artifact@v4
         with:
@@ -143,7 +150,8 @@ jobs:
           TARGET: "/var/www/timeline"
 
   tag-and-release:
-    needs: deploy
+    needs: [deploy, deploy-pages]
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' && !cancelled() }}
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
     runs-on: ubuntu-latest
     env:
