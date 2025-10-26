@@ -118,18 +118,12 @@ jobs:
       fail-fast: true
       max-parallel: 2
       matrix:
-        server: ${{ fromJson(vars.DEPLOY_SERVERS) }}
+        server: ${{ fromJson(vars.DEPLOY_SERVERS || '[{"name":"default","host":"","user":""}]') }}
     steps:
-      # - name: Deploy to GitHub Pages
-      #   if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
-      #   id: deploy_pages
-      #   uses: actions/deploy-pages@v4
-      - name: Debug mapped values (non-sensitive)
-        run: |
-          echo "matrix.server=${{ toJson(matrix.server) }}"
-          echo "server name = ${{ matrix.server.name }}"
-          echo "server host = ${{ matrix.server.host }}"
-          echo "server user = ${{ matrix.server.user }}"
+      - name: Deploy to GitHub Pages
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
+        id: deploy_pages
+        uses: actions/deploy-pages@v4
 
       - name: Download build artifact for SSH deploy
         uses: actions/download-artifact@v4
@@ -140,8 +134,8 @@ jobs:
       - name: SSH deploy to server
         uses: easingthemes/ssh-deploy@v5.1.1
         env:
-          REMOTE_USER: ${{ matrix.server.user }}
-          REMOTE_HOST: ${{ matrix.server.host }}
+          REMOTE_USER: ${{ matrix.server.user || vars.ALY_USER }}
+          REMOTE_HOST: ${{ matrix.server.host || vars.ALY_HOST }}
           REMOTE_PORT: "22"
           ARGS: "-rltgoDzvO --delete"
           SSH_PRIVATE_KEY: ${{ secrets.ALY_SSH_TOKEN }}
