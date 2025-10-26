@@ -118,8 +118,9 @@ jobs:
       - name: Set deploy servers matrix
         id: set-matrix
         run: |
-          if [ -n "${{ vars.DEPLOY_SERVERS }}" ]; then
-            echo "servers=${{ vars.DEPLOY_SERVERS }}" >> $GITHUB_OUTPUT
+          SERVERS='${{ vars.DEPLOY_SERVERS }}'
+          if [ -n "$SERVERS" ]; then
+            echo "servers=$SERVERS" >> $GITHUB_OUTPUT
           else
             echo 'servers=[{"name":"default","host":"${{ vars.ALY_HOST }}","user":"${{ vars.ALY_USER }}"}]' >> $GITHUB_OUTPUT
           fi
