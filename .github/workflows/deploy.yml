@@ -107,6 +107,23 @@ jobs:
           name: build-dist
           path: build/
 
+  prepare-deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target || 'dev' }}
+    outputs:
+      servers: ${{ steps.set-matrix.outputs.servers }}
+    steps:
+      - name: Set deploy servers matrix
+        id: set-matrix
+        run: |
+          if [ -n "${{ vars.DEPLOY_SERVERS }}" ]; then
+            echo "servers=${{ vars.DEPLOY_SERVERS }}" >> $GITHUB_OUTPUT
+          else
+            echo 'servers=[{"name":"default","host":"${{ vars.ALY_HOST }}","user":"${{ vars.ALY_USER }}"}]' >> $GITHUB_OUTPUT
+          fi
+
   deploy-pages:
     needs: build
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
@@ -120,7 +137,7 @@ jobs:
         uses: actions/deploy-pages@v4
 
   deploy:
-    needs: build
+    needs: prepare-deploy
     runs-on: ubuntu-latest
     environment:
       name: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target || 'dev' }}
@@ -130,7 +147,7 @@ jobs:
       fail-fast: true
       max-parallel: 2
       matrix:
-        server: ${{ fromJson(vars.DEPLOY_SERVERS || '[{"name":"default","host":"","user":""}]') }}
+        server: ${{ fromJson(needs.prepare-deploy.outputs.servers) }}
     steps:
       - name: Download build artifact for SSH deploy
         uses: actions/download-artifact@v4
@@ -141,8 +158,8 @@ jobs:
       - name: SSH deploy to server
         uses: easingthemes/ssh-deploy@v5.1.1
         env:
-          REMOTE_USER: ${{ matrix.server.user || vars.ALY_USER }}
-          REMOTE_HOST: ${{ matrix.server.host || vars.ALY_HOST }}
+          REMOTE_USER: ${{ matrix.server.user }}
+          REMOTE_HOST: ${{ matrix.server.host }}
           REMOTE_PORT: "22"
           ARGS: "-rltgoDzvO --delete"
           SSH_PRIVATE_KEY: ${{ secrets.ALY_SSH_TOKEN }}
