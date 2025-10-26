@@ -137,13 +137,19 @@ jobs:
           SOURCE: "build/*"
           TARGET: "/var/www/timeline"
 
+  tag-and-release:
+    needs: deploy
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
+    runs-on: ubuntu-latest
+    env:
+      NODE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.node_version || '22.18.0' }}
+    steps:
       - name: Checkout code for tagging
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Create tag
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
         id: create_tag
         run: |
           set -e
@@ -155,13 +161,11 @@ jobs:
           git push origin "$TAG"
 
       - name: Setup Node for changelog
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
         uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Generate changelog
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
         id: gen_changelog
         run: |
           npx git-cliff --current --strip header --no-exec -o CHANGELOG_TEMP.md
@@ -171,9 +175,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-
       - name: Create GitHub Release
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
