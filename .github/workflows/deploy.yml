@@ -152,7 +152,6 @@ jobs:
   tag-and-release:
     needs: [deploy, deploy-pages]
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' && !cancelled() }}
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
     runs-on: ubuntu-latest
     env:
       NODE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.node_version || '22.18.0' }}
