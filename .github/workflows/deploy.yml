@@ -39,6 +39,39 @@ jobs:
     environment:
       name: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target || 'dev' }}
     steps:
+      - name: Checkout code
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check version updated for prod deployment
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
+        run: |
+          # Get current version from package.json
+          CURRENT_VERSION=$(jq -r '.version' package.json)
+          echo "Current version: $CURRENT_VERSION"
+          
+          # Get the latest tag version
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "none")
+          echo "Latest tag: $LATEST_TAG"
+          
+          # Extract version from latest tag (assuming format like v1.2.3 or 1.2.3)
+          if [ "$LATEST_TAG" != "none" ]; then
+            LATEST_VERSION=$(echo "$LATEST_TAG" | sed 's/^v//' | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' || echo "0.0.0")
+          else
+            LATEST_VERSION="0.0.0"
+          fi
+          echo "Latest version: $LATEST_VERSION"
+          
+          # Compare versions
+          if [ "$CURRENT_VERSION" = "$LATEST_VERSION" ]; then
+            echo "::error::Version in package.json ($CURRENT_VERSION) has not been updated. Please bump the version before deploying to prod."
+            exit 1
+          fi
+          
+          echo "✅ Version check passed: $LATEST_VERSION -> $CURRENT_VERSION"
+
       - name: Check required secrets and variables
         id: check
         run: |
