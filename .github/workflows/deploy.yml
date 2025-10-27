@@ -213,8 +213,15 @@ jobs:
         id: create_tag
         run: |
           set -e
-          TAG="v$(date +%Y%m%d-%H%M%S)-${GITHUB_RUN_NUMBER}"
+          # Get version from package.json
+          VERSION=$(jq -r '.version' package.json)
+          echo "Version from package.json: $VERSION"
+          
+          # Create tag name with version
+          TAG="v${VERSION}"
           echo "TAG_NAME=$TAG" >> $GITHUB_ENV
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git tag "$TAG" "$GITHUB_SHA"
@@ -241,7 +248,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ env.TAG_NAME }}
-          release_name: ${{ env.TAG_NAME }}
+          release_name: Release ${{ env.VERSION }}
           body: ${{ steps.gen_changelog.outputs.changelog }}
           draft: false
           prerelease: false
