@@ -243,15 +243,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Release
-        uses: actions/create-release@v1
+        run: |
+          gh release create "${{ env.TAG_NAME }}" \
+            --title "Release ${{ env.VERSION }}" \
+            --notes "${{ steps.gen_changelog.outputs.changelog }}" \
+            --target "$GITHUB_SHA"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ env.TAG_NAME }}
-          release_name: Release ${{ env.VERSION }}
-          body: ${{ steps.gen_changelog.outputs.changelog }}
-          draft: false
-          prerelease: false
 
       - name: Create PR to merge into main
         uses: actions/github-script@v8
