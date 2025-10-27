@@ -116,8 +116,10 @@ jobs:
     steps:
       - name: Set deploy servers matrix
         id: set-matrix
+        env:
+          SERVERS: ${{ vars.DEPLOY_SERVERS }}
         run: |
-          echo "servers=${{ vars.DEPLOY_SERVERS }}" >> $GITHUB_OUTPUT
+          echo "servers=$SERVERS" >> $GITHUB_OUTPUT
 
   deploy-pages:
     needs: build
