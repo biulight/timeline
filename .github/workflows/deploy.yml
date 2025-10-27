@@ -1,3 +1,4 @@
+name: Aliyun&Tencent
 on:
   workflow_dispatch:
     inputs:
@@ -51,11 +52,11 @@ jobs:
           # Get current version from package.json
           CURRENT_VERSION=$(jq -r '.version' package.json)
           echo "Current version: $CURRENT_VERSION"
-          
+
           # Get the latest tag version
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "none")
           echo "Latest tag: $LATEST_TAG"
-          
+
           # Extract version from latest tag (assuming format like v1.2.3 or 1.2.3)
           if [ "$LATEST_TAG" != "none" ]; then
             LATEST_VERSION=$(echo "$LATEST_TAG" | sed 's/^v//' | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' || echo "0.0.0")
@@ -63,13 +64,13 @@ jobs:
             LATEST_VERSION="0.0.0"
           fi
           echo "Latest version: $LATEST_VERSION"
-          
+
           # Compare versions
           if [ "$CURRENT_VERSION" = "$LATEST_VERSION" ]; then
             echo "::error::Version in package.json ($CURRENT_VERSION) has not been updated. Please bump the version before deploying to prod."
             exit 1
           fi
-          
+
           echo "✅ Version check passed: $LATEST_VERSION -> $CURRENT_VERSION"
 
       - name: Check required secrets and variables
@@ -80,7 +81,7 @@ jobs:
           if [ -z "${{ secrets.ALY_SSH_TOKEN }}" ]; then
             missing="${missing} secrets.ALY_SSH_TOKEN"
           fi
-          
+
           # Check DEPLOY_SERVERS variable
           if [ -z "${{ vars.DEPLOY_SERVERS }}" ]; then
             missing="${missing} vars.DEPLOY_SERVERS"
@@ -168,7 +169,7 @@ jobs:
 
   deploy:
     needs: prepare-deploy
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     environment:
       name: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target || 'dev' }}
     env:
