@@ -235,7 +235,7 @@ jobs:
       - name: Generate changelog
         id: gen_changelog
         run: |
-          npx git-cliff --current --strip header --no-exec -o CHANGELOG_TEMP.md
+          npx git-cliff --config git-cliff.toml --latest --strip header --no-exec -o CHANGELOG_TEMP.md
           echo "changelog<<EOF" >> $GITHUB_OUTPUT
           cat CHANGELOG_TEMP.md >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
