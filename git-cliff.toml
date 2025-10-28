@@ -1,0 +1,33 @@
+[git]
+conventional_commits = true
+filter_unconventional = false
+tag_pattern = "^v"
+
+[cli]
+# remove the leading "Changelog" header when using --strip header
+# produce markdown
+
+[changelog]
+header = ""
+body = """
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim | upper_first }}
+{% for commit in commits %}
+- {{ commit.message | split(pat="\n") | first }} - ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/biulight/timeline/commit/{{ commit.id }})) - {{ commit.author.name }}
+{% endfor %}
+{% endfor %}
+"""
+footer = ""
+
+[commit_types]
+feat = { title = "🚀 Features", group = "Features" }
+fix = { title = "🐛 Bug Fixes", group = "Bug Fixes" }
+perf = { title = "⚡ Performance", group = "Performance" }
+refactor = { title = "♻️ Refactoring", group = "Refactoring" }
+docs = { title = "📚 Documentation", group = "Documentation" }
+style = { title = "🎨 Style", group = "Style" }
+test = { title = "🧪 Tests", group = "Tests" }
+chore = { title = "⚙️ Miscellaneous Tasks", group = "Miscellaneous Tasks" }
+
+[replacements]
+# example: { "BREAKING CHANGE:" = "**BREAKING:**" }

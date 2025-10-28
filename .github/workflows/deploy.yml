@@ -1,3 +1,4 @@
+name: Deploy Dev/UAT
 on:
   workflow_dispatch:
     inputs:
@@ -9,25 +10,18 @@ on:
         options:
           - dev
           - uat
-          - prod
       node_version:
         description: 'Node.js version'
         required: false
         default: '22.18.0'
         type: string
-  push:
-    branches:
-      - release
 
 # 最小必要权限（根级），尽量收窄为后续步骤需要的权限
 permissions:
-  contents: write       # 推送 tag、创建 release、checkout/push 操作
-  pages: write          # deploy-pages / upload-pages-artifact
-  id-token: write       # deploy-pages 可能需要 OIDC
-  pull-requests: write  # github-script 创建 PR
+  contents: read
 
 concurrency:
-  group: deployment-${{ github.ref }}
+  group: deployment-${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target || 'dev' }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -36,24 +30,23 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       ready: ${{ steps.check.outputs.ready }}
+    environment:
+      name: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target || 'dev' }}
     steps:
       - name: Check required secrets and variables
         id: check
         run: |
           missing=""
-          # Check SSH secret for server deploy and repo vars for host/user
+          # Check SSH secret for server deploy
           if [ -z "${{ secrets.ALY_SSH_TOKEN }}" ]; then
             missing="${missing} secrets.ALY_SSH_TOKEN"
           fi
-          if [ -z "${{ vars.ALY_USER }}" ]; then
-            missing="${missing} vars.ALY_USER"
-          fi
-          if [ -z "${{ vars.ALY_HOST }}" ]; then
-            missing="${missing} vars.ALY_HOST"
+
+          # Check DEPLOY_SERVERS variable
+          if [ -z "${{ vars.DEPLOY_SERVERS }}" ]; then
+            missing="${missing} vars.DEPLOY_SERVERS"
           fi
 
-          # If Pages deployment will run (only for workflow_dispatch + prod), we don't require extra secrets here.
-          # Emit helpful guidance and fail early if any required items missing.
           if [ -n "$missing" ]; then
             echo "Missing required configuration:$missing"
             echo "::error::Missing required configuration:$missing"
@@ -61,7 +54,7 @@ jobs:
           fi
 
           echo "All required secrets/vars present."
-          echo "::set-output name=ready::true"
+          echo "ready=true" >> $GITHUB_OUTPUT
 
   build:
     needs: preflight
@@ -92,32 +85,40 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Upload static files as artifact for Pages
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
-        id: pages_artifact
-        uses: actions/upload-pages-artifact@v4
-        with:
-          path: build/
-
       - name: Upload build artifact (for SSH deploy)
         uses: actions/upload-artifact@v5
         with:
           name: build-dist
           path: build/
 
-  deploy:
+  prepare-deploy:
     needs: build
     runs-on: ubuntu-latest
     environment:
       name: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target || 'dev' }}
+    outputs:
+      servers: ${{ steps.set-matrix.outputs.servers }}
+    steps:
+      - name: Set deploy servers matrix
+        id: set-matrix
+        env:
+          SERVERS: ${{ vars.DEPLOY_SERVERS }}
+        run: |
+          echo "servers=$SERVERS" >> $GITHUB_OUTPUT
+
+  deploy:
+    needs: prepare-deploy
+    runs-on: self-hosted
+    environment:
+      name: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target || 'dev' }}
     env:
       DEPLOY_TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target || 'dev' }}
+    strategy:
+      fail-fast: true
+      max-parallel: 2
+      matrix:
+        server: ${{ fromJson(needs.prepare-deploy.outputs.servers) }}
     steps:
-      - name: Deploy to GitHub Pages
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
-        id: deploy_pages
-        uses: actions/deploy-pages@v4
-
       - name: Download build artifact for SSH deploy
         uses: actions/download-artifact@v6
         with:
@@ -127,66 +128,11 @@ jobs:
       - name: SSH deploy to server
         uses: easingthemes/ssh-deploy@v5.1.1
         env:
-          REMOTE_USER: ${{ vars.ALY_USER }}
-          REMOTE_HOST: ${{ vars.ALY_HOST }}
+          REMOTE_USER: ${{ matrix.server.user }}
+          REMOTE_HOST: ${{ matrix.server.host }}
           REMOTE_PORT: "22"
           ARGS: "-rltgoDzvO --delete"
           SSH_PRIVATE_KEY: ${{ secrets.ALY_SSH_TOKEN }}
           SOURCE: "build/*"
           TARGET: "/var/www/timeline"
 
-      - name: Checkout code for tagging
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Create tag
-        id: create_tag
-        run: |
-          set -e
-          TAG="v$(date +%Y%m%d-%H%M%S)-${GITHUB_RUN_NUMBER}"
-          echo "TAG_NAME=$TAG" >> $GITHUB_ENV
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git tag "$TAG" "$GITHUB_SHA"
-          git push origin "$TAG"
-
-      - name: Create GitHub Release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ env.TAG_NAME }}
-          release_name: ${{ env.TAG_NAME }}
-          body: Automated release
-          draft: false
-          prerelease: false
-
-      - name: Create PR to merge into main
-        uses: actions/github-script@v8
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const ref = context.ref || '';
-            const branch = ref.replace('refs/heads/', '');
-            if (!branch) {
-              core.info('Cannot determine branch name from context.ref; skipping PR creation.');
-              return;
-            }
-            const { data: existing } = await github.rest.pulls.list({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              head: `${context.repo.owner}:${branch}`,
-              base: 'main'
-            });
-            if (existing.length) { core.info(`PR already exists: #${existing[0].number}`); return; }
-            const { data: pr } = await github.rest.pulls.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              head: branch,
-              base: 'main',
-              title: `chore: merge ${branch} into main (auto after deploy)`,
-              body: 'Auto-created by CI after successful deploy.'
-            });
-            core.notice(`Created PR #${pr.number}`);
