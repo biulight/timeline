@@ -1,4 +1,4 @@
-name: Aliyun&Tencent
+name: Deploy Dev/UAT
 on:
   workflow_dispatch:
     inputs:
@@ -10,25 +10,18 @@ on:
         options:
           - dev
           - uat
-          - prod
       node_version:
         description: 'Node.js version'
         required: false
         default: '22.18.0'
         type: string
-  push:
-    branches:
-      - release
 
 # 最小必要权限（根级），尽量收窄为后续步骤需要的权限
 permissions:
-  contents: write       # 推送 tag、创建 release、checkout/push 操作
-  pages: write          # deploy-pages / upload-pages-artifact
-  id-token: write       # deploy-pages 可能需要 OIDC
-  pull-requests: write  # github-script 创建 PR
+  contents: read
 
 concurrency:
-  group: deployment-${{ github.ref }}
+  group: deployment-${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target || 'dev' }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -40,39 +33,6 @@ jobs:
     environment:
       name: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target || 'dev' }}
     steps:
-      - name: Checkout code
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Check version updated for prod deployment
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
-        run: |
-          # Get current version from package.json
-          CURRENT_VERSION=$(jq -r '.version' package.json)
-          echo "Current version: $CURRENT_VERSION"
-
-          # Get the latest tag version
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "none")
-          echo "Latest tag: $LATEST_TAG"
-
-          # Extract version from latest tag (assuming format like v1.2.3 or 1.2.3)
-          if [ "$LATEST_TAG" != "none" ]; then
-            LATEST_VERSION=$(echo "$LATEST_TAG" | sed 's/^v//' | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' || echo "0.0.0")
-          else
-            LATEST_VERSION="0.0.0"
-          fi
-          echo "Latest version: $LATEST_VERSION"
-
-          # Compare versions
-          if [ "$CURRENT_VERSION" = "$LATEST_VERSION" ]; then
-            echo "::error::Version in package.json ($CURRENT_VERSION) has not been updated. Please bump the version before deploying to prod."
-            exit 1
-          fi
-
-          echo "✅ Version check passed: $LATEST_VERSION -> $CURRENT_VERSION"
-
       - name: Check required secrets and variables
         id: check
         run: |
@@ -87,8 +47,6 @@ jobs:
             missing="${missing} vars.DEPLOY_SERVERS"
           fi
 
-          # If Pages deployment will run (only for workflow_dispatch + prod), we don't require extra secrets here.
-          # Emit helpful guidance and fail early if any required items missing.
           if [ -n "$missing" ]; then
             echo "Missing required configuration:$missing"
             echo "::error::Missing required configuration:$missing"
@@ -127,13 +85,6 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Upload static files as artifact for Pages
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
-        id: pages_artifact
-        uses: actions/upload-pages-artifact@v4
-        with:
-          path: build/
-
       - name: Upload build artifact (for SSH deploy)
         uses: actions/upload-artifact@v4
         with:
@@ -154,18 +105,6 @@ jobs:
           SERVERS: ${{ vars.DEPLOY_SERVERS }}
         run: |
           echo "servers=$SERVERS" >> $GITHUB_OUTPUT
-
-  deploy-pages:
-    needs: build
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' }}
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
 
   deploy:
     needs: prepare-deploy
@@ -197,99 +136,3 @@ jobs:
           SOURCE: "build/*"
           TARGET: "/var/www/timeline"
 
-  tag-and-release:
-    needs: [deploy, deploy-pages]
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'prod' && !cancelled() && needs.deploy.result == 'success' }}
-    runs-on: ubuntu-latest
-    env:
-      NODE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.node_version || '22.18.0' }}
-    steps:
-      - name: Checkout code for tagging
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Create tag
-        id: create_tag
-        run: |
-          set -e
-          # Get version from package.json
-          VERSION=$(jq -r '.version' package.json)
-          echo "Version from package.json: $VERSION"
-          
-          # Create tag name with version
-          TAG="v${VERSION}"
-          echo "TAG_NAME=$TAG" >> $GITHUB_ENV
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git tag "$TAG" "$GITHUB_SHA"
-          git push origin "$TAG"
-
-      - name: Setup Node for changelog
-        uses: actions/setup-node@v5
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Generate changelog
-        id: gen_changelog
-        run: |
-          npx git-cliff --config git-cliff.toml --latest --strip header --no-exec -o CHANGELOG_TEMP.md
-          echo "changelog<<EOF" >> $GITHUB_OUTPUT
-          cat CHANGELOG_TEMP.md >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create GitHub Release
-        run: |
-          gh release create "${{ env.TAG_NAME }}" \
-            --title "Release ${{ env.VERSION }}" \
-            --notes "${{ steps.gen_changelog.outputs.changelog }}" \
-            --target "$GITHUB_SHA"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create PR to merge into main
-        uses: actions/github-script@v8
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const ref = context.ref || '';
-            const branch = ref.replace('refs/heads/', '');
-            if (!branch) {
-              core.info('Cannot determine branch name from context.ref; skipping PR creation.');
-              return;
-            }
-            const { data: existing } = await github.rest.pulls.list({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              head: `${context.repo.owner}:${branch}`,
-              base: 'main'
-            });
-            if (existing.length) { core.info(`PR already exists: #${existing[0].number}`); return; }
-            const { data: pr } = await github.rest.pulls.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              head: branch,
-              base: 'main',
-              title: `chore: merge ${branch} into main (auto after deploy)`,
-              body: 'Auto-created by CI after successful deploy.'
-            });
-            core.notice(`Created PR #${pr.number}`);
-
-
-
-
-
-
-
-
-
-
-
-
-
-# git-cliff config (basic). Adjust sections/types as needed.
