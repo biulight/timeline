@@ -1,4 +1,4 @@
-name: Deploy ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'uat' && 'UAT' || github.event_name == 'workflow_dispatch' && inputs.deploy_target == 'dev' && 'Dev' || 'Dev/UAT' }}
+name: Deploy Dev/UAT
 on:
   workflow_dispatch:
     inputs:
@@ -15,7 +15,7 @@ on:
         required: false
         default: '22.18.0'
         type: string
-run-name: Deploy to ${{ inputs.deploy_target && format('{0}', inputs.deploy_target) || 'dev' }} by @${{ github.actor }}
+run-name: Deploy to ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_target || 'dev' }} by @${{ github.actor }}
 
 # 最小必要权限（根级），尽量收窄为后续步骤需要的权限
 permissions:
