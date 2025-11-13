@@ -226,12 +226,27 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Download build artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: build-dist
+          path: build-dist
+
+      - name: Package build artifacts
+        run: |
+          cd build-dist
+          tar -czf ../blog-build-${{ env.VERSION }}.tar.gz .
+          zip -r ../blog-build-${{ env.VERSION }}.zip .
+          cd ..
+
       - name: Create GitHub Release
         run: |
           gh release create "${{ env.TAG_NAME }}" \
             --title "Release ${{ env.VERSION }}" \
             --notes "${{ steps.gen_changelog.outputs.changelog }}" \
-            --target "$GITHUB_SHA"
+            --target "$GITHUB_SHA" \
+            blog-build-${{ env.VERSION }}.tar.gz \
+            blog-build-${{ env.VERSION }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
