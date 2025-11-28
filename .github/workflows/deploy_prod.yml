@@ -129,6 +129,7 @@ jobs:
       - name: Upload build artifact (for SSH deploy)
         uses: actions/upload-artifact@v5
         with:
+          retention-days: 2
           name: build-dist
           path: build/
 
@@ -219,12 +220,12 @@ jobs:
           # Get version from package.json
           VERSION=$(jq -r '.version' package.json)
           echo "Version from package.json: $VERSION"
-          
+
           # Create tag name with version
           TAG="v${VERSION}"
           echo "TAG_NAME=$TAG" >> $GITHUB_ENV
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-          
+
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git tag "$TAG" "$GITHUB_SHA"
