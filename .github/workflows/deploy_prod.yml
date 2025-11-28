@@ -181,8 +181,8 @@ jobs:
           which ssh || (echo "ssh not found" && exit 1)
           which rsync || (echo "rsync not found" && exit 1)
           # Optionally check for OS updates
-          sudo apt-get update -y
-          sudo apt-get upgrade -y
+          # sudo apt-get update -y
+          # sudo apt-get upgrade -y
           echo "Runner verification complete."
       - name: Download build artifact for SSH deploy
         uses: actions/download-artifact@v6
