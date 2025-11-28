@@ -160,15 +160,29 @@ jobs:
 
   deploy:
     needs: prepare-deploy
-    runs-on: self-hosted
+    runs-on: [self-hosted, deploy-prod] # Use a dedicated label for secure deployment runner
     environment:
       name: prod
+    permissions: # Scope permissions as narrowly as possible
+      contents: read
+      id-token: write
+      actions: read
     strategy:
       fail-fast: true
       max-parallel: 2
       matrix:
         server: ${{ fromJson(needs.prepare-deploy.outputs.servers) }}
     steps:
+      - name: Verify runner security and dependencies
+        run: |
+          echo "Verifying runner security and dependencies..."
+          # Check for required tools
+          which ssh || (echo "ssh not found" && exit 1)
+          which rsync || (echo "rsync not found" && exit 1)
+          # Optionally check for OS updates
+          sudo apt-get update -y
+          sudo apt-get upgrade -y
+          echo "Runner verification complete."
       - name: Download build artifact for SSH deploy
         uses: actions/download-artifact@v6
         with:
