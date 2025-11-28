@@ -1,0 +1,31 @@
+name: Artifact Auto Cleanup
+on:
+  workflow_dispatch:
+#  schedule:
+#    - cron: '0 2 * * *'   # 每天凌晨2点运行
+
+jobs:
+  cleanup-artifacts:
+    runs-on: self-hosted
+    permissions:
+      actions: write  # 添加删除 artifacts 所需的权限
+    steps:
+      - name: Clean up old artifacts
+        env:
+          GH_TOKEN: ${{ secrets. GITHUB_TOKEN }}
+          RETENTION_DAYS: 1 # 这里设置保留天数
+        run: |
+          echo "Start cleaning artifacts older than $RETENTION_DAYS days..."
+          # 获取所有 artifact，使用 --argjson 传递环境变量到 jq
+          artifacts=$(gh api repos/${{ github.repository }}/actions/artifacts | jq --argjson days "$RETENTION_DAYS" '.artifacts[] | select((now - (.created_at | fromdateiso8601)) / 86400 > $days) | .id')
+          if [ -z "$artifacts" ]; then
+            echo "No artifacts to delete."
+          else
+            echo "Found artifacts to delete:"
+            echo "$artifacts"
+            for id in $artifacts; do
+              echo "Deleting artifact id $id"
+              gh api --method DELETE repos/${{ github.repository }}/actions/artifacts/$id || echo "Failed to delete artifact $id"
+            done
+            echo "Cleanup completed."
+          fi
