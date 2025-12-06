@@ -32,7 +32,7 @@ jobs:
       name: prod
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -99,7 +99,7 @@ jobs:
       NODE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.node_version || '22.18.0' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -209,7 +209,7 @@ jobs:
       NODE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.node_version || '22.18.0' }}
     steps:
       - name: Checkout code for tagging
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
