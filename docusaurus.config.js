@@ -113,7 +113,7 @@ const config = {
             label: 'GitHub',
             position: 'right',
           },
-          { href: '/blog/rss.xml', label: 'RSS', position: 'right' },
+          { href: 'https://blog.biulight.cn/timeline/blog/rss.xml', label: 'RSS', position: 'right' },
         ],
       },
       footer: {
