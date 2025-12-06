@@ -1,0 +1,69 @@
+# .editorconfig 模板
+# 说明：
+# - 全局缩进为 2 个空格（indent_size = 2）。
+# - 其他设置参考主流配置；对某些语言的“主流缩进”（如 Python 的 4 空格、Go 的 tab、Makefile 的 tab）在下方提供了可选（已注释）覆盖示例。
+# - 注释行以 # 开头。
+
+root = true
+
+# 默认（应用到所有文件）
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+tab_width = 2
+max_line_length = 100
+
+# 文档类文件：不去除行尾空格，关闭最大行长限制（便于写长链接或换行）
+[*.md]
+trim_trailing_whitespace = false
+max_line_length = off
+
+[*.markdown]
+trim_trailing_whitespace = false
+max_line_length = off
+
+# 配置/数据文件：通常使用 2 空格
+[*.{yml,yaml,json}]
+indent_size = 2
+tab_width = 2
+
+# 前端 / 脚本 / 样式：2 空格（常见主流）
+[*.{js,jsx,ts,tsx,vue,html,css,scss,less,xml}]
+indent_size = 2
+tab_width = 2
+
+# 各语言文件（如果需要可以单独调整）
+[*.{java,kt,kts,rs,rb,php}]
+indent_size = 2
+tab_width = 2
+
+# Shell 脚本：保留默认行为（2 空格），如需可改为 4 或 tab
+[*.sh]
+indent_style = space
+indent_size = 2
+
+# 可选：如果你希望对某些语言遵循其主流缩进（取消下面相应段的注释）
+# Python (PEP8 常用 4 空格)
+# [*.py]
+# indent_style = space
+# indent_size = 4
+# tab_width = 4
+
+# Go (gofmt 使用 tab)
+# [*.go]
+# indent_style = tab
+# tab_width = 4
+
+# Makefile 必须使用 tab
+# [Makefile]
+# indent_style = tab
+# tab_width = 8
+
+# 二进制或生成文件：不应用文本规则（防止编辑器误处理）
+[*.{png,jpg,jpeg,gif,ico,zip,tar,gz,class,exe}]
+trim_trailing_whitespace = false
+insert_final_newline = false
