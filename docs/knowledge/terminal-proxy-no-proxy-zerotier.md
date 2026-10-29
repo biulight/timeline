@@ -57,6 +57,7 @@ env | rg '^(HTTP_PROXY|HTTPS_PROXY|NO_PROXY|http_proxy|https_proxy|no_proxy)='
 
 ```bash
 shine env list
+shine env explain PROXY_NO_PROXY
 shine info shell/proxy
 ```
 
@@ -74,7 +75,7 @@ localhost,127.0.0.1,::1
 
 ```bash
 shine env set PROXY_NO_PROXY \
-  'localhost,127.0.0.1,::1,.home.example.internal,192.168.0.0/16'
+  'localhost,127.0.0.1,::1,.home.example.internal,192.168.0.0/16' --global
 ```
 
 至少建议覆盖这些类型：
@@ -84,6 +85,8 @@ shine env set PROXY_NO_PROXY \
 - 局域网地址段：例如 `192.168.0.0/16`
 
 如果你有多个私有后缀或多个地址段，可以继续追加到同一串逗号分隔值中。
+`--global` 将设置保存在本机全局配置。全局 env 文件或项目中的同名值仍可能覆盖它，
+用 `shine env explain PROXY_NO_PROXY` 确认实际生效来源。
 
 ### 4. 更新已安装的 Shine `proxy` 预设
 
@@ -94,7 +97,11 @@ shine update shell/proxy
 shine upgrade shell/proxy
 ```
 
-若当前终端没有自动拿到新值，重新打开一个终端，或按你的 shell 方式重新加载 profile。
+更新后，在需要使用代理的终端重新执行 `setproxy`，让新的排除列表进入当前会话：
+
+```bash
+setproxy
+```
 
 ### 5. 不使用 Shine 时的通用处理
 
