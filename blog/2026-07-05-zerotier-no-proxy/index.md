@@ -72,6 +72,7 @@ env | rg '^(HTTP_PROXY|HTTPS_PROXY|NO_PROXY|http_proxy|https_proxy|no_proxy)='
 
 ```bash
 shine env list
+shine env explain PROXY_NO_PROXY
 shine info shell/proxy
 ```
 
@@ -79,7 +80,7 @@ shine info shell/proxy
 
 ```bash
 shine env set PROXY_NO_PROXY \
-  'localhost,127.0.0.1,::1,.home.example.internal,192.168.0.0/16'
+  'localhost,127.0.0.1,::1,.home.example.internal,192.168.0.0/16' --global
 ```
 
 这里至少建议覆盖：
@@ -88,11 +89,14 @@ shine env set PROXY_NO_PROXY \
 - 私有域名后缀，例如 `.home.example.internal`
 - 局域网地址段，例如 `192.168.0.0/16`
 
-修改后不要只停留在 `env set`。Shine 会先把已安装的 `proxy` 预设标记为可更新，还需要执行：
+`--global` 明确写入本机全局配置；若全局 env 文件或项目中还有同名项，用
+`shine env explain PROXY_NO_PROXY` 检查是否被覆盖。保存后，检查并更新已安装的预设，
+再让排除列表进入当前终端会话：
 
 ```bash
 shine update shell/proxy
 shine upgrade shell/proxy
+setproxy
 ```
 
 如果你不是用 Shine 管理终端代理，本质上也一样：最终要确认当前 shell 里的 `NO_PROXY` / `no_proxy` 已经包含这些私有目标。

@@ -43,7 +43,7 @@ Split-DNS 匹配的是域名后缀。`nas` 不会自动匹配
 - 一台具有固定公网 IP 的 Linux 服务器，用于运行 `zerotier-planet`；
 - 已安装 Docker、Docker Compose 插件和 Git；
 - 一台已加入 ZeroTier 网络的 Linux 主机，用于运行 CoreDNS；
-- 客户端已安装 Shine 0.36.0 或更高版本；
+- 客户端已安装 Shine；本文中的命令与配置按 2.7.2 核对；
 - 可以控制 Planet 服务器和 DNS 主机的防火墙。
 
 先规划并记录这些值：
@@ -283,13 +283,14 @@ PRIVATE_DNS_DOMAIN = { value = "home.example.internal", description = "ZeroTier 
 PRIVATE_DNS_SERVERS = { value = "<DNS_ZEROTIER_IP>", description = "ZeroTier 网络中的 CoreDNS 地址" }
 ```
 
-在每台客户端克隆这个私有仓库并链接 overlay：
+在每台客户端的 Shine 项目目录之外，克隆这个私有仓库并关联全局 overlay：
 
 ```bash
 git clone <PRIVATE_OVERLAY_REPOSITORY> <LOCAL_OVERLAY_PATH>
 shine preset overlay link <LOCAL_OVERLAY_PATH>
 shine preset overlay info
-shine env get PRIVATE_DNS_DOMAIN
+shine env explain PRIVATE_DNS_DOMAIN
+shine env explain PRIVATE_DNS_SERVERS
 shine sys info split-dns
 shine sys apply split-dns --dry-run
 shine sys apply split-dns
@@ -304,17 +305,21 @@ shine sys apply split-dns --dry-run
 shine sys apply split-dns
 ```
 
-Shine 会在每次新命令启动时重新读取 overlay 的 `shine.env.toml`，因此 `shine preset pull` 后不需要
-再执行 `shine env set`。如果 overlay 仓库还有其他预设，`shine preset pull` 会一起进行安全的
-fast-forward 更新；仓库存在本地改动时会拒绝拉取，避免覆盖未提交内容。
+Shine 会在每次新命令启动时重新读取 overlay 的 `shine.env.toml`。没有更高层的同名配置时，
+`shine preset pull` 后即可使用共享值。如果 overlay 仓库还有其他预设，`shine preset pull`
+会一起进行 fast-forward 更新；仓库存在本地改动时会拒绝拉取，避免覆盖未提交内容。
+这里使用的是手动关联的本地仓库；`overlay link --git` 创建的受管镜像会跟随远端覆盖更新，
+应在上游仓库维护内容，不要直接编辑镜像。
 
 ### 只配置当前设备
 
 不需要跨设备同步时，也可以把值写入当前设备的 Shine 全局配置：
 
 ```bash
-shine env set PRIVATE_DNS_DOMAIN home.example.internal
-shine env set PRIVATE_DNS_SERVERS <DNS_ZEROTIER_IP>
+shine env set PRIVATE_DNS_DOMAIN home.example.internal --global
+shine env set PRIVATE_DNS_SERVERS <DNS_ZEROTIER_IP> --global
+shine env explain PRIVATE_DNS_DOMAIN
+shine env explain PRIVATE_DNS_SERVERS
 shine sys info split-dns
 shine sys apply split-dns --dry-run
 shine sys apply split-dns
@@ -322,9 +327,13 @@ shine sys status
 ```
 
 `PRIVATE_DNS_SERVERS` 支持用逗号、空格或换行分隔多个 IP，可以部署第二台 CoreDNS 后增加
-冗余。Shine 不接受主机名作为 DNS 服务器地址。已链接 overlay 时，同名 overlay 值的
-优先级高于 `shine env set` 保存的全局值；要做单机覆盖，应使用更高优先级的项目
-`shine.env.toml`，或为该设备链接单独的 overlay。
+冗余。Shine 不接受主机名作为 DNS 服务器地址。`--global` 明确写入本机全局配置，
+即使当前目录属于 Shine 项目也不会改写项目配置。
+
+同名值的优先级从低到高为：内置默认值、overlay、全局配置、全局 `shine.env.toml`、项目配置、
+项目 `shine.env.toml`。因此，本机全局值会覆盖 overlay 共享基线。用 `shine env explain`
+检查实际来源；需要重新采用共享值时，先检查并删除不再需要的本机或项目同名项。
+完整的分层与写入规则见[环境变量与密钥](https://biulight.github.io/shine/zh-Hans/guides/environment)。
 
 Shine 在不同平台创建的资源不同：
 
@@ -333,9 +342,12 @@ Shine 在不同平台创建的资源不同：
   `DNS=` 和路由域 `Domains=~home.example.internal`，然后重启 `systemd-resolved`；
 - Windows：创建命名空间 `.home.example.internal` 的 NRPT 规则。
 
-这些操作需要管理员权限。Shine 会给资源加入所有权标记；如果目标文件已经存在但不是
-Shine 创建的，它会拒绝覆盖。修改域名或 DNS 地址后，重新运行
-`shine sys apply split-dns` 即可更新。
+变更前会展示操作计划，确认后按需请求管理员权限。Shine 会检查安装记录、所有权与当前内容；
+遇到非受管资源或手工修改时，会停止并提示处理。修改域名或 DNS 地址后，先预览再重新运行
+`shine sys apply split-dns` 更新。
+
+Ubuntu 需要应用通过 `systemd-resolved` 的 `127.0.0.53` stub 查询。若提示 stub 被关闭，
+先恢复 `DNSStubListener` 并检查本机解析链路，再应用规则。
 
 不再需要这条规则时先预览，再安全移除：
 
@@ -344,8 +356,8 @@ shine sys uninstall split-dns --dry-run
 shine sys uninstall split-dns
 ```
 
-卸载只删除 Shine 记录且仍带有所有权标记的 Split-DNS 资源，不会删除 CoreDNS 数据或
-退出 ZeroTier 网络。
+卸载前会核对安装记录、所有权和当前内容；资源被手工修改时需要先处理冲突。
+卸载不会删除 CoreDNS 数据或退出 ZeroTier 网络。
 
 ## 分层验证
 
@@ -376,10 +388,18 @@ Resolve-DnsName nas.home.example.internal -Server <DNS_ZEROTIER_IP>
 
 ### 3. 通过系统解析器
 
-不要再指定 DNS 服务器：
+使用当前系统的解析入口检查。macOS：
 
 ```bash
-dig nas.home.example.internal A
+dscacheutil -q host -a name nas.home.example.internal
+scutil --dns
+```
+
+Ubuntu：
+
+```bash
+resolvectl query nas.home.example.internal
+resolvectl status
 ```
 
 Windows：
@@ -389,8 +409,8 @@ Resolve-DnsName nas.home.example.internal
 Get-DnsClientNrptPolicy -Effective
 ```
 
-macOS 可用 `scutil --dns` 检查对应域名的 resolver；Ubuntu 可用
-`resolvectl status` 和 `resolvectl query nas.home.example.internal` 检查路由域。
+确认域名对应的 resolver 或路由域指向 CoreDNS。macOS 的 `dig` 不使用系统的域名专属
+resolver，检查 `/etc/resolver/` 规则是否生效时应使用上述系统查询。
 
 ### 4. 访问实际服务
 
@@ -442,4 +462,4 @@ Split-DNS 正常，再让代理软件对 `home.example.internal` 使用系统 DN
 - [zerotier-planet 客户端配置说明](https://github.com/Jonnyan404/zerotier-planet/blob/main/%E5%AE%A2%E6%88%B7%E7%AB%AF%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95.md)
 - [CoreDNS file 插件](https://coredns.io/plugins/file/)
 - [CoreDNS forward 插件](https://coredns.io/plugins/forward/)
-- [Shine 初始化与管理系统](/products/shine/guides/system-init)
+- [Shine 初始化与管理系统](https://biulight.github.io/shine/zh-Hans/guides/system-init)

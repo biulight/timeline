@@ -80,5 +80,5 @@ shine app install JetBrains
 
 - [WebStorm 官方：Vim in WebStorm](https://www.jetbrains.com/help/webstorm/using-product-as-the-vim-editor.html)
 - [IdeaVim 插件](https://plugins.jetbrains.com/plugin/164-ideavim)
-- [Shine：管理应用配置](/products/shine/guides/app-presets)
+- [Shine：管理应用配置](https://biulight.github.io/shine/zh-Hans/guides/app-presets)
 - [Vim 起步](../vim/起步.md)

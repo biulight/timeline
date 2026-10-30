@@ -61,13 +61,10 @@ shine sys bootstrap --preset minimal
 shine sys status
 ```
 
-如果以后想检查这些软件是否有可用更新，可以运行：
-
-```bash
-shine sys update
-```
-
-该命令只检查由 `shine sys bootstrap` 记录的软件，不会自动安装升级。
+`shine sys status` 展示保存的操作结果，不会实时检查软件版本。Shine 不检查或升级这些第三方软件；
+后续更新请使用安装它们的包管理器或上游工具，例如 apt、mise 或 rustup。
+重新执行 `shine sys bootstrap` 只会确认软件存在。`shine update` 和 `shine upgrade` 用于
+Shine 管理的配置与系统资源，不负责第三方软件版本。
 
 ## 需要更完整的终端环境
 

@@ -15,7 +15,7 @@ sidebar_position: 1
 
 ## 已发布
 
-- [Shine](/products/shine)：跨平台预设管理工具；完整中英文手册由 Shine 仓库独立发布。
+- [Shine](/products/shine)：统一管理脚本工具、应用配置和项目环境，让敏感信息加密保存、按需使用；完整中英文手册由 Shine 仓库独立发布。
 - [age-plugin-phone](/products/age-plugin-phone)：通过手机逐次授权 age 解密的实验性插件；中英文手册由产品仓库维护。
 
 <!--
