@@ -5,14 +5,33 @@ projects:
     status: active
     local_path: ../shine
     repository: https://github.com/biulight/shine
-    manual_root: docs/products/shine
+    portal_root: docs/products/shine
+    public_manual_root: ../shine/docs/manual
+    public_translation_root: ../shine/website/i18n/zh-Hans/docusaurus-plugin-content-docs/current
     fact_sources:
       - docs/README.zh-CN.md
       - CHANGELOG.md
       - cli/src/commands
       - Cargo.toml
-    last_reviewed_ref: a4129cc6d68e86bf1a105d165db9e0e4e07bf168
-    last_reviewed_version: 0.36.0
+    last_migrated_ref: e228922a5f263eabda92dba3cf102560c61d8a9e
+    last_migrated_version: 1.2.0
+
+  - id: age-plugin-phone
+    name: age-plugin-phone
+    status: active
+    local_path: ../age-plugin-phone
+    repository: https://github.com/biulight/age-plugin-phone
+    portal_root: docs/products/age-plugin-phone
+    public_manual_root: ../age-plugin-phone/docs/manual
+    public_translation_root: ../age-plugin-phone/website/i18n/zh-Hans/docusaurus-plugin-content-docs/current
+    fact_sources:
+      - crates/desktop/src/main.rs
+      - crates/desktop/src/age_identity.rs
+      - crates/desktop/src/transport_policy.rs
+      - docs/releases/v0.1.0-beta.2.md
+      - Cargo.toml
+    last_migrated_ref: e08d631b33bd0c16948ca26275bc851b0bf56c15
+    last_migrated_version: 0.1.0-beta.2
 
   - id: deskmesh
     name: Deskmesh

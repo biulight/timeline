@@ -114,33 +114,35 @@ PIN 和触摸 YubiKey。验证后删除这些测试文件。
 把接收者的完整指纹写入 `~/.shine/config.toml`：
 
 ```toml
-gpg_key_id = "<完整指纹>"
+gpg_recipients = ["<完整指纹>"]
 ```
 
-先用无关紧要的测试值验证全局环境加解密：
+旧配置中的 `gpg_key_id` 已废弃，迁移步骤见[配置参考](https://biulight.github.io/shine/zh-Hans/reference/configuration)。
+先在 Shine 项目之外的测试目录，用无关紧要的值验证全局环境加解密；示例显式选择 GPG 后端：
 
 ```bash
-shine env set YUBIKEY_TEST "not-a-real-secret"
-shine env encrypt --from YUBIKEY_TEST --set YUBIKEY_TEST_SECRET
-shine env decrypt YUBIKEY_TEST_SECRET
-shine env delete YUBIKEY_TEST
-shine env delete YUBIKEY_TEST_SECRET
+shine env set YUBIKEY_TEST "not-a-real-secret" --global
+shine env secret encrypt --backend gpg --from YUBIKEY_TEST --set YUBIKEY_TEST_SECRET --global
+shine env secret decrypt YUBIKEY_TEST_SECRET
+shine env delete YUBIKEY_TEST --global
+shine env delete YUBIKEY_TEST_SECRET --global
 ```
 
 输出应为 `not-a-real-secret`。加密阶段不要求插入 YubiKey；解密阶段需要设备。
 
-对于含 `shine.workspace.toml` 的项目，可继续验证封存和子进程注入：
+对于含 `shine.workspace.toml` 的项目，先按[环境变量与密钥](https://biulight.github.io/shine/zh-Hans/guides/environment)
+配置工作区的加密接收者，再验证封存和子进程注入。将 `development` 和命令占位符替换为项目实际值：
 
 ```bash
-shine env seal
+shine env secret seal
 shine env run --mode development -- <你的命令>
 ```
 
 也可以不使用 workspace，只把已保存的值提供给单个命令：
 
 ```bash
-shine env run --with MY_TOKEN -- <你的命令>
-shine env run --with MY_TOKEN=API_TOKEN -- <你的命令>
+shine env run --no-workspace --with MY_TOKEN -- <你的命令>
+shine env run --no-workspace --with MY_TOKEN=API_TOKEN -- <你的命令>
 ```
 
 ## 故障排查
@@ -172,8 +174,8 @@ Windows PowerShell 使用相同命令。该操作重启 `gpg-agent` 和 `scdaemo
 
 ### Shine 报告找不到 recipient
 
-确认 `gpg_key_id` 使用 `gpg --list-keys --with-colons` 可找到的完整指纹；也可以用
-`shine env encrypt -r <完整指纹>` 临时覆盖配置。Shine 调用的是当前终端 PATH 中的
+确认 `gpg_recipients` 中的指纹可由 `gpg --list-keys --with-colons` 找到；也可以用
+`shine env secret encrypt --backend gpg -r <完整指纹>` 临时覆盖配置。Shine 调用的是当前终端 PATH 中的
 `gpg`，因此应先在同一个终端完成上述 GPG 测试。
 
 YubiKey OpenPGP 的 PIN、触摸策略和管理命令以
