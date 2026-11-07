@@ -29,6 +29,7 @@ description: 统一管理常用脚本工具和应用配置，让敏感信息加�
 - [English documentation（默认）](https://biulight.github.io/shine/)
 - [简体中文手册](https://biulight.github.io/shine/zh-Hans/)
 - [安装与快速开始](https://biulight.github.io/shine/zh-Hans/quick-start)
+- [升级与迁移](https://biulight.github.io/shine/zh-Hans/upgrading)
 - [内置预设](https://biulight.github.io/shine/zh-Hans/reference/built-in-presets)
 - [环境变量与密钥](https://biulight.github.io/shine/zh-Hans/guides/environment)
 - [在 AI 辅助开发中保护密钥](https://biulight.github.io/shine/zh-Hans/guides/agent-secret-safety)

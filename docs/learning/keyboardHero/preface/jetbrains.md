@@ -71,10 +71,20 @@ shine app install JetBrains
 
 ## 验证
 
-1. 在编辑器中按 `Esc`，光标应进入 Normal 模式；按 `i` 后可插入文本。
-2. 插入模式输入 `jj`，确认返回 Normal 模式。
-3. 在 Normal 模式按 `Space` 后再按 `r`，确认 IDE 执行“格式化代码”。
-4. 若已使用 Shine，运行 `shine update` 检查受管配置状态。
+在编辑器中按 `Esc`，光标应进入 Normal 模式，按 `i` 后可插入文本。接着按实际使用的配置验证。
+
+### 使用本文的最小配置
+
+1. 插入模式连续输入 `jj`，确认返回 Normal 模式。
+2. 在 Normal 模式按 `Space` 后再按 `r`，确认 IDE 执行“格式化代码”。
+
+### 使用 Shine 内置配置
+
+安装配置后重启 IDE，再检查以下操作。分屏快捷键按 Shine 2.10 的内置预设核对，自定义 overlay 中的映射以自己的配置为准。
+
+1. 插入模式连续输入 `jk`，确认返回 Normal 模式。
+2. 打开左右两个编辑器分屏，在 Normal 模式用 `Ctrl+H` 和 `Ctrl+L` 切换焦点。上下分屏对应 `Ctrl+J` 和 `Ctrl+K`。
+3. 运行 `shine update` 检查受管配置状态。
 
 ## 相关内容
 
