@@ -1,6 +1,5 @@
 {
   "name": "@biulight/blog",
-  "version": "1.2.4",
   "private": true,
   "packageManager": "pnpm@11.7.0",
   "scripts": {
@@ -8,7 +7,6 @@
     "start": "docusaurus start",
     "build": "docusaurus build",
     "swizzle": "docusaurus swizzle",
-    "deploy": "docusaurus deploy",
     "clear": "docusaurus clear",
     "serve": "docusaurus serve",
     "write-translations": "docusaurus write-translations",
