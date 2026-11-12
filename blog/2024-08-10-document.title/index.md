@@ -28,11 +28,6 @@ tags: [Web, Supervisory control]
 
 ```js
 function watchForTitleChanges(callback, type) {
-  let ele = document.getElementsByTagName("title")?.[0];
-  if (!ele) {
-    ele = document.createElement("title");
-    document.head.appendChild(ele);
-  }
   let previousTitle = document.title;
   const observer = new MutationObserver((mutationList, observer) => {
     const title = document.title;
@@ -43,26 +38,34 @@ function watchForTitleChanges(callback, type) {
     }
   });
 
-  observer.observe(ele, { childList: true });
-  // 非仅监听一次更新时，返回取消监听函数
-  if (type !== "once") return observer.disconnect;
+  observer.observe(document.head, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+  });
+  return () => observer.disconnect();
 }
 ```
 
-完美实现如下：
+下面只演示观察“注册之后的下一次标题变化”。路由切换时先取消上一次观察，避免标题未变化时积累监听：
 
 ```js
-// 页面初次加载时，在 load 事件中注册 watch
-window.addEventListener("load", () => {
-  watchForTitleChanges((title) => {
+let stopWatching;
+function watchNextTitle() {
+  stopWatching?.();
+  stopWatching = watchForTitleChanges((title) => {
     console.log("title发生了变化", title);
   }, "once");
-});
+}
+
+// 已有标题可直接读取；只有之后的变化才需要观察
+console.log(document.title);
+
+// 页面初次加载时，在 load 事件中注册 watch
+window.addEventListener("load", watchNextTitle);
 
 // 路由切换时，在 hashchange 事件中注册 watch
-window.addEventListener("hashchange", () => {
-  watchForTitleChanges((title) => {
-    console.log("title发生了变化", title);
-  }, "once");
-});
+window.addEventListener("hashchange", watchNextTitle);
 ```
+
+若标题在监听注册前已经更新，上述回调不会补发；埋点应优先接入应用的路由完成或标题更新钩子，并直接读取 `document.title`。History 路由也不能只监听 `hashchange`。

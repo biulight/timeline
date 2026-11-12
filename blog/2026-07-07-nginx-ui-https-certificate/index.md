@@ -26,8 +26,8 @@ Nginx UI 进程、Nginx 进程和 ACME 签发是三条相互关联但可以独�
 
 ```bash
 systemctl status nginx-ui --no-pager
-journalctl -u nginx-ui -n 100 --no-pager
-nginx -t
+sudo journalctl -u nginx-ui -n 100 --no-pager
+sudo nginx -t
 systemctl status nginx --no-pager
 ```
 
@@ -98,7 +98,8 @@ CA 从 ZeroSSL 切换到 Let’s Encrypt 时，我明确写出了 `--server lets
 ## 为什么没有直接引用 acme.sh 的内部文件
 
 `acme.sh` 会在 `~/.acme.sh/` 下保存自己的状态和证书材料，但其官方说明明确不建议服务器
-直接引用这些内部文件。正确做法是使用 `--install-cert` 复制到生产路径，并配置重载命令：
+直接引用这些内部文件。正确做法是使用 `--install-cert` 复制到生产路径，并配置重载命令。
+下面的部署和续期示例沿用[完整指南](/knowledge/nginx-ui-https-certificate)的账户前提：acme.sh 已由 root 安装并完成签发，命令在同一受控 root Bash 中执行，`~` 指 `/root`，续期任务也属于 root。不要在普通用户签发后只给安装命令加 `sudo`，否则会混用证书状态目录或留下无权部署的续期任务：
 
 ```bash
 ~/.acme.sh/acme.sh --install-cert -d app.example.com --ecc \

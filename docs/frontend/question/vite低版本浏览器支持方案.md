@@ -43,6 +43,12 @@ Vue 3 项目使用 Vite 构建后，在较旧的浏览器中可能出现白屏�
 pnpm add -D @vitejs/plugin-legacy
 ```
 
+若项目使用 Vite 8.1.4 之前的版本，或显式设置了 `build.minify: 'terser'`，还需要安装 Terser（见[插件官方用法](https://github.com/vitejs/vite/tree/main/packages/plugin-legacy#usage)）：
+
+```bash
+pnpm add -D terser
+```
+
 ### 3. 配置构建产物
 
 在 `vite.config.ts` 中注册插件。插件会生成现代产物和供不支持原生 ES Module 的浏览器条件加载的 legacy 产物，并根据最终 bundle 的实际使用情况处理对应的 ES 语言特性 polyfill。

@@ -34,14 +34,25 @@ sidebar_position: 5
 
 ## 1. 先确认基础服务和域名
 
+开始变更前备份整个 Nginx 配置目录，包括 `sites-available`、`conf.d` 和证书文件，而不只是 `nginx.conf`：
+
+```bash
+NGINX_BACKUP_DIR=$(sudo mktemp -d /root/nginx-before-https.XXXXXXXX) && \
+sudo cp -a /etc/nginx/. "$NGINX_BACKUP_DIR/" && \
+sudo chmod 700 "$NGINX_BACKUP_DIR" && \
+printf '备份目录：%s\n' "$NGINX_BACKUP_DIR"
+```
+
+记录输出的备份目录。目录权限仅允许 root 访问；若配置引用了 `/etc/nginx` 之外的文件，也需另行备份。不要将包含私钥的备份提交到仓库。
+
 检查 Nginx UI、Nginx 配置以及 80/443 端口：
 
 ```bash
 systemctl status nginx-ui --no-pager
-journalctl -u nginx-ui -n 100 --no-pager
-nginx -t
+sudo journalctl -u nginx-ui -n 100 --no-pager
+sudo nginx -t
 systemctl status nginx --no-pager
-ss -lntp | rg ':(80|443)\b'
+sudo ss -lntp | rg ':(80|443)\b'
 ```
 
 再确认站点解析和权威 DNS：
@@ -52,8 +63,8 @@ dig AAAA app.example.com +short
 dig NS example.com +short
 ```
 
-AAAA 记录存在时，必须确认 IPv6 也能到达正确主机；否则 ACME 验证和浏览器访问可能出现
-IPv4 成功、IPv6 失败的分裂现象。DNS-01 不要求站点开放 80 端口，但 DNS API 必须操作
+AAAA 记录存在时，必须确认 IPv6 也能到达正确主机；否则 HTTP-01 验证和浏览器访问可能出现
+IPv4 成功、IPv6 失败的分裂现象；站点 A/AAAA 地址不会参与 DNS-01 的 TXT 验证。DNS-01 不要求站点开放 80 端口，但 DNS API 必须操作
 `dig NS` 返回的权威 DNS 区域。
 
 ## 2. 理解 Nginx UI 直接申请证书的边界
@@ -62,7 +73,8 @@ Nginx UI 支持 ACME 证书申请和续期，但应注意：
 
 - `HTTPChallengePort` 是 Nginx UI 后端的 HTTP-01 挑战监听端口，文档默认值为 `9180`；
 - Let’s Encrypt 的 HTTP-01 验证仍只从公网 80 端口发起，请求必须被正确转发到挑战处理程序；
-- DNS-01 使用系统 DNS，或 Nginx UI `RecursiveNameservers` 中配置的递归服务器；
+- Nginx UI v2 的 DNS-01 使用系统 DNS，或 `RecursiveNameservers` 中配置的递归服务器；
+  v3 已将传播检查配置移到 DNS-01 插件，升级后应在插件设置中修改；
 - 自动发现只识别分离的证书和私钥文件，例如 `fullchain.pem` 与 `privkey.pem`；
 - 合并了证书和私钥的单个 PEM 文件不会被自动发现。
 
@@ -71,16 +83,22 @@ Nginx UI 支持 ACME 证书申请和续期，但应注意：
 
 ## 3. 安装 acme.sh
 
-先阅读安装脚本，再决定是否执行。官方安装命令会把程序放到 `~/.acme.sh/`，创建 shell
-别名，并添加定时任务：
+本文统一由 root 管理 acme.sh、证书部署和续期任务，避免普通用户签发后无法写入
+`/etc/nginx/ssl` 或重载 Nginx。先进入 root shell，再启动 Bash，后续步骤保持在该 Bash 中执行；
+此时 `~/.acme.sh/` 指 root 的目录。不要在流程中混用普通用户的安装或 cron。
+
+先阅读安装脚本，再决定是否执行。安装会创建 shell 别名和当前用户的定时任务：
 
 ```bash
-curl -fsSL https://get.acme.sh -o /tmp/get-acme.sh
-less /tmp/get-acme.sh
-sh /tmp/get-acme.sh email=<ACME_ACCOUNT_EMAIL>
+sudo -i
+bash
+umask 077
+curl -fsSL https://get.acme.sh -o /root/get-acme.sh
+less /root/get-acme.sh
+sh /root/get-acme.sh email='<ACME_ACCOUNT_EMAIL>'
 ```
 
-重新打开 shell，或直接使用完整路径检查版本和帮助：
+保持当前 root Bash，直接使用完整路径检查版本和帮助：
 
 ```bash
 ~/.acme.sh/acme.sh --version
@@ -92,14 +110,18 @@ sh /tmp/get-acme.sh email=<ACME_ACCOUNT_EMAIL>
 以下示例以阿里云 DNS 为例。变量名和 `dns_ali` 必须与 `acme.sh` 的 DNS API 实现一致：
 
 ```bash
-export Ali_Key='<DNS_API_KEY>'
-export Ali_Secret='<DNS_API_SECRET>'
+read -r -s -p 'Ali_Key: ' Ali_Key; echo
+read -r -s -p 'Ali_Secret: ' Ali_Secret; echo
+export Ali_Key Ali_Secret
 
 ~/.acme.sh/acme.sh --issue \
   --server letsencrypt \
   --dns dns_ali \
   -d app.example.com
 ```
+
+上面的 Bash 提示会隐藏输入，避免把真实凭据直接写进命令历史。acme.sh 会为续期保存 DNS API
+凭据，因此 root 的 acme.sh 目录及其备份也必须按敏感数据保护。
 
 如果权威 DNS 实际由 DNSPod 管理，应改用 DNSPod 对应的 `dns_dp` 和官方文档列出的凭据
 变量；不要把阿里云凭据用于 DNSPod 区域，反之亦然。不同提供商的密钥格式和权限模型不可
@@ -114,6 +136,8 @@ export Ali_Secret='<DNS_API_SECRET>'
   -d example.com \
   -d '*.example.com'
 ```
+
+若选择这组根域与通配符证书，后续 `--install-cert` 和 `--info` 应使用首个域名 `-d example.com` 选择证书，TXT 查询改为 `_acme-challenge.example.com`。部署目录仍可使用下文示例路径，但必须与 Nginx 的证书路径一致；不要把此分支与 `-d app.example.com` 的单域名证书混用。
 
 `acme.sh` 当前默认签发 ECC 证书。后续安装和查询命令应保留 `--ecc`。不要频繁使用
 `--force` 重试生产 CA；排障时先检查日志、API 权限和 TXT 传播，必要时使用 CA 的 staging
@@ -141,7 +165,7 @@ sudo install -d -m 700 /etc/nginx/ssl/app.example.com
 使用 `--install-cert` 复制证书链和私钥，并配置安全的重载命令：
 
 ```bash
-sudo ~/.acme.sh/acme.sh --install-cert \
+~/.acme.sh/acme.sh --install-cert \
   -d app.example.com \
   --ecc \
   --key-file /etc/nginx/ssl/app.example.com/privkey.pem \
@@ -240,19 +264,16 @@ sudo openssl x509 \
 sudo journalctl -u nginx -n 50 --no-pager
 ```
 
+确认 `crontab -l` 显示的是 root 的 acme.sh 任务。完成操作后执行两次 `exit`，分别退出 Bash 和 root 登录 shell。
+
 不要为了“测试续期”反复对生产 CA 使用 `--renew --force`。若确实需要端到端演练，应先备份
 证书目录，并在 ACME staging 环境完成。
 
 ## 回滚
 
-改动站点前，先备份当前配置和证书目录：
+使用开始前记录的完整备份，恢复本次修改过的站点配置及其证书文件；新建的站点文件应在确认没有其他依赖后移出启用目录。不要仅恢复 `nginx.conf` 而遗漏它引用的 `sites-available` 或 `conf.d` 文件，也不要覆盖其他维护者在此期间的改动。
 
-```bash
-sudo cp -a /etc/nginx/nginx.conf /etc/nginx/nginx.conf.before-https
-sudo cp -a /etc/nginx/ssl /etc/nginx/ssl.before-https
-```
-
-如果新配置导致 Nginx 测试失败，恢复原站点配置或原证书路径，然后执行：
+恢复后执行：
 
 ```bash
 sudo nginx -t && sudo systemctl reload nginx

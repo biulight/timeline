@@ -208,7 +208,7 @@ GitHub Environment 适合存放环境级 Variables、Secrets 和审批规则：
 
 ### 用矩阵部署到多台服务器
 
-服务器清单可以保存在 Environment Variable 中，例如：
+下面的矩阵在 Job 启动前展开，因此服务器清单应放在仓库或组织级配置变量 `DEPLOY_SERVERS` 中，例如：
 
 ```json
 [{"name":"web-a","host":"web-a.example.com","user":"deploy"}]
@@ -216,13 +216,13 @@ GitHub Environment 适合存放环境级 Variables、Secrets 和审批规则：
 
 ```yaml
 strategy:
-  fail-fast: true
+  fail-fast: false
   max-parallel: 2
   matrix:
     server: ${{ fromJSON(vars.DEPLOY_SERVERS) }}
 ```
 
-启用 `fail-fast` 能在一台服务器失败后尽快停止尚未开始的矩阵任务，但已经完成的节点不会自动回滚。生产部署必须配套以下一种方案：
+此处使用 `fail-fast: false`，避免一个节点失败时强制取消其他正在部署的节点。`fail-fast: true` 会取消排队中和运行中的矩阵 Job，并非只停止尚未开始的任务；已经完成或被中断的节点都不会自动回滚。应记录各节点最终状态，生产部署还必须配套以下一种方案：
 
 - 上传到版本目录，完成健康检查后原子切换软链接；
 - 保留上一版本并让部署脚本支持显式回滚；
@@ -272,6 +272,12 @@ steps:
   - uses: actions/checkout@v6
   - run: rustup target add ${{ matrix.target }}
   - run: cargo build --release --target ${{ matrix.target }}
+  - name: Package binary
+    shell: bash
+    run: |
+      mkdir -p dist
+      tar -czf "dist/${{ matrix.asset }}.tar.gz" \
+        -C "target/${{ matrix.target }}/release" "${{ matrix.binary }}"
   - uses: actions/upload-artifact@v7
     with:
       name: ${{ matrix.asset }}

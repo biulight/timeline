@@ -97,11 +97,11 @@ echo '$nrconf{override_rc}{qr(^actions\.runner\..+\.service$)} = 0;' \
 | 名称 | `Start WSL <DISTRO>` |
 | 触发器 | 登录时 |
 | 程序或脚本 | `C:\Windows\System32\wsl.exe` |
-| 添加参数 | `-d <DISTRO> --exec /bin/true` |
+| 添加参数 | `-d <DISTRO> --exec /bin/sleep infinity` |
 | 条件 | 笔记本电脑建议取消“仅在使用交流电源时启动” |
 | 设置 | 可选：失败后每分钟重试一次，最多 3 次 |
 
-`/bin/true` 的作用是启动指定发行版并让 systemd 接管后续服务；它本身不会让 WSL 常驻。runner 是长期运行的 systemd 服务时，无需为此额外启动 `sleep infinity`。若你的发行版没有任何需要常驻的服务，才考虑把参数改为 `-d <DISTRO> --exec sleep infinity`。
+systemd 服务本身不会让 WSL 实例保持运行。这里用 `sleep infinity` 保持一个由 Windows 启动的前台进程，runner 仍由 systemd 管理。任务应使用拥有该 WSL 发行版的 Windows 账户，并取消“运行时间超过指定时长则停止任务”；重复触发时选择“不启动新实例”。正常情况下，计划任务会持续显示“正在运行”。
 
 也可以在 Windows PowerShell 中创建等价的登录任务。该命令会覆盖同名任务，因此请先确认名称没有被其他工作流使用：
 
@@ -109,8 +109,11 @@ echo '$nrconf{override_rc}{qr(^actions\.runner\..+\.service$)} = 0;' \
 schtasks /create /f `
   /tn "Start WSL <DISTRO>" `
   /sc onlogon `
-  /tr "C:\Windows\System32\wsl.exe -d <DISTRO> --exec /bin/true"
+  /tr "C:\Windows\System32\wsl.exe -d <DISTRO> --exec /bin/sleep infinity"
 ```
+
+使用 `schtasks` 创建后，仍需到任务属性中取消“运行时间超过指定时长则停止任务”，并确认
+重复触发时“不启动新实例”。否则系统默认的执行时限可能终止保活进程。
 
 ## 4. 验证整条启动链路
 
@@ -133,7 +136,7 @@ wsl -d <DISTRO> -- bash -lc 'cd ~/services/<OWNER>-actions-runners/<RUNNER_NAME>
 - `systemctl` 中存在并启用了 `actions.runner.*.service`；
 - GitHub 仓库或组织的 **Settings → Actions → Runners** 中，runner 状态为 `Idle`，而非 `Offline`。
 
-最后重启 Windows 或退出再登录一次，确认该状态能自动恢复。
+关闭所有 WSL 终端后等待几分钟，再确认 runner 仍为 `Idle`。最后重启 Windows 或退出再登录一次，确认该状态能自动恢复。
 
 ## 日常管理与排查
 

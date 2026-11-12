@@ -56,9 +56,9 @@ Options API，但不再继续扩散只服务于 Vue 2 的写法。这样做不�
 局部维护都向 Vue 3 靠近。
 
 `this.$set` 是典型例子。Vue 2 需要它来让新增对象属性或数组索引更新具备响应式；Vue 3 基于 Proxy，
-普通赋值已经会响应。预备期内，改到相关代码时就倾向写成 `object[key] = value` 或
-`array[index] = value`，而不是继续引入 `$set`。这既减少了后续迁移的工作量，也让代码表达的意图更
-直接。
+普通赋值已经会响应。但 Vue 2.7 仍保留 Vue 2 的响应式限制：新增对象属性和直接修改数组索引仍不能随意替换为普通赋值。
+预备期可先声明对象属性、用 `splice` 更新数组；只有切换到 Vue 3 后，才能统一把这些 `$set` 调用改为
+`object[key] = value` 或 `array[index] = value`。见 [Vue 2.7 的行为差异](https://v2.vuejs.org/v2/guide/migration-vue-2-7.html#Behavior-Differences-from-Vue-3)。
 
 ESLint 在这个过程中承担的是“逐步收紧的迁移护栏”，而不是一次性把历史代码全部打红。Vue 2.7 阶段，
 为避免存量项目立刻被遗留写法阻断，曾对 `v-bind.sync`、`$set` / `$delete` 相关的废弃规则保留豁免；
@@ -144,7 +144,7 @@ Plus 对应的 VXE 渲染插件。紧接着处理 Vue 3 的机械性变化，例
 指令钩子改名、过时插槽语法、`$listeners`、`$scopedSlots` 和 test-utils v2 的配置变化。
 
 机械替换也有边界。全仓有 151 处 `.sync`，可以分批转换并结合 diff 与构建检查；但 `slot="..."`
-命中了 122 个文件，其中既有待迁的模板语法，也有合法的 JSX 属性和注释。对它全局替换会直接破坏
+有 122 处命中，其中既有待迁的模板语法，也有合法的 JSX 属性和注释。对它全局替换会直接破坏
 代码。类似地，路由守卫、全局指令、BiuTable / selectgrid 这类 VXE Table 深度封装，以及
 BiuDialog / BiuForm 这样的基础组件，都必须按实际行为人工审查。
 
@@ -175,11 +175,13 @@ Vue 2 会把 `:is` 接收的 `() => import('./Component.vue')` 当作异步组�
 迁移时若向没有动态路径段的路由传 `params`，Vue Router 4 会丢弃它并给出警告；而把本应填入必填
 动态段的值改放到 `query`，又会直接抛出 `Missing required param`，使跳转失败。
 
-最终采用的规则不是“`push` 用 query、`resolve` 用 params”，而是只看目标路由的 `path`：
+最终采用的规则不是“`push` 用 query、`resolve` 用 params”。使用命名路由（`name`）导航时，要按路由定义中的动态段选择参数：
 
 - 没有声明动态段的值，一律用 `query`；
 - 必填动态段必须用 `params`；
-- 可选动态段两者都可用，但要保持同一路由的读取约定一致。
+- 可选动态段用 `params` 填充路径；用 `query` 表达其他筛选条件时，页面须明确读取 `route.query`，两者不能当作同一个字段。
+
+若传入的是 `path`，Vue Router 会忽略同时提供的 `params`；应自行构造并编码完整路径，或改用 `name` 加 `params`。见 [Vue Router 编程式导航](https://router.vuejs.org/guide/essentials/navigation.html)。
 
 这条规则后来也指导了可分享 Campaign 链接和内部跳转的收敛，避免了“页面能打开但详情参数丢失”的
 静默回归。
@@ -197,8 +199,9 @@ Element UI 的日期格式使用 `yyyy`、`dd` 等小写 token；Element Plus �
 
 另一个更隐蔽的问题是 `default-time="['00:00:00', '23:59:59']"`。在 Element Plus 中，裸时间
 字符串会被解析为 Invalid Date；当日期范围控件没有绑定值时，内部日期计算继而变成 `NaN`，日历
-面板整体失效。解决方式是使用完整且合法的日期时间字符串，例如
-`'2000-01-01 00:00:00'`。这类差异无法靠 API 名称替换发现，必须在“编辑已有数据”和“新建空数据”
+面板整体失效。应按 [Element Plus DatePicker 文档](https://element-plus.org/en-US/component/date-picker.html#default-time-for-start-date-and-end-date)
+使用动态绑定 `:default-time="defaultTime"`，并令 `defaultTime` 为两个 `Date` 对象，例如
+`[new Date(2000, 0, 1, 0, 0, 0), new Date(2000, 0, 1, 23, 59, 59)]`。这类差异无法靠 API 名称替换发现，必须在“编辑已有数据”和“新建空数据”
 两种场景中分别打开控件核验。
 
 ### 全局性能补丁会破坏组件交互

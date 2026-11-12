@@ -37,9 +37,9 @@ mv ~/.local/share/nvim ~/.local/share/nvim.bak
 mv ~/.local/state/nvim ~/.local/state/nvim.bak
 mv ~/.cache/nvim ~/.cache/nvim.bak
 
-git clone --depth 1 https://github.com/AstroNvim/template ~/.config/nvim
-rm -rf ~/.config/nvim/.git
-nvim
+git clone --depth 1 https://github.com/AstroNvim/template ~/.config/nvim && \
+  rm -rf ~/.config/nvim/.git && \
+  nvim
 ```
 
 前四条命令仅在对应目录存在时才需要执行；没有旧配置时可跳过。最后的 `rm -rf` 只移除刚克隆模板的 Git 元数据，使该目录成为你自己的配置；不要对其他路径使用该命令。
@@ -53,7 +53,8 @@ Move-Item $env:LOCALAPPDATA\nvim $env:LOCALAPPDATA\nvim.bak
 Move-Item $env:LOCALAPPDATA\nvim-data $env:LOCALAPPDATA\nvim-data.bak
 
 git clone --depth 1 https://github.com/AstroNvim/template $env:LOCALAPPDATA\nvim
-Remove-Item $env:LOCALAPPDATA\nvim\.git -Recurse -Force
+if ($LASTEXITCODE -ne 0) { throw "克隆失败，已停止；请检查现有配置和备份。" }
+Remove-Item $env:LOCALAPPDATA\nvim\.git -Recurse -Force -ErrorAction Stop
 nvim
 ```
 

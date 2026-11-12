@@ -83,14 +83,16 @@ resolvectl query <CA_DOMAIN>
 
 ## 部署 step-ca
 
-在 CA 主机创建不纳入版本控制的密码文件：
+仅在首次部署且尚未初始化 CA 数据卷时，创建不纳入版本控制的密码文件。已有部署必须复用与 CA 私钥配套的原密码；不要重新生成覆盖。下面使用 `noclobber`，文件已存在时会拒绝写入：
 
 ```bash
 sudo install -d -m 700 /opt/step-ca/secrets
+sudo sh -c 'umask 077; set -C; openssl rand -base64 48 > /opt/step-ca/secrets/ca-password' && \
+  sudo chmod 644 /opt/step-ca/secrets/ca-password
 cd /opt/step-ca
-openssl rand -base64 48 | sudo tee secrets/ca-password >/dev/null
-sudo chmod 644 secrets/ca-password
 ```
+
+确认密码文件创建成功后再继续。若已有 CA 数据卷但密码文件丢失，应从受控备份恢复原文件，不能用新随机密码代替。
 
 密码文件需能被 Compose 挂载后的容器用户读取。不要将密码写入 Compose 文件或提交到 Git；
 若环境支持正确的 UID/GID，只读挂载可以采用更严格的权限。
@@ -152,13 +154,13 @@ sudo docker compose logs --tail=100 step-ca
 导出根证书并验证 CA 与 ACME 目录：
 
 ```bash
-sudo docker compose cp <CA_CONTAINER>:/home/step/certs/root_ca.crt ./root_ca.crt
+sudo docker compose cp step-ca:/home/step/certs/root_ca.crt ./root_ca.crt
 
 curl --noproxy '*' --cacert ./root_ca.crt https://<CA_DOMAIN>:9443/health
 curl --noproxy '*' --cacert ./root_ca.crt \
   https://<CA_DOMAIN>:9443/acme/acme/directory
 
-sudo docker compose exec <CA_CONTAINER> \
+sudo docker compose exec step-ca \
   step certificate fingerprint /home/step/certs/root_ca.crt
 ```
 
@@ -177,6 +179,8 @@ curl --noproxy '*' https://<CA_DOMAIN>:9443/health
 ```
 
 不同发行版的信任存储命令不同；使用其平台推荐方式，但只导入公开根证书，绝不导入 CA 私钥。
+
+下文在首次签发、模拟续期和 systemd 服务中都显式使用包含刚安装根证书的 `/etc/ssl/certs/ca-certificates.crt`。这是 Debian/Ubuntu 的系统 CA bundle 路径；其他发行版须替换为实际 bundle。若同一主机也续期公网证书，应保留 bundle 中的公共根证书，不要只放私有根证书。
 
 ## 配置 Nginx 与 HTTP-01 校验
 
@@ -199,16 +203,17 @@ server {
     }
 
     location / {
-        allow <PRIVATE_NETWORK_CIDR>;
-        deny all;
         return 301 https://$host$request_uri;
     }
 }
 ```
 
-先从宿主机和 CA 容器两侧验证挑战路径：
+这里的 HTTP 站点只提供挑战文件和 HTTPS 重定向；HTTP 来源限制由前述监听地址和防火墙承担。下文 HTTPS 反向代理仍保留来源访问规则。
+
+检查并重载 Nginx，使上面的 HTTP 配置生效，再从宿主机和 CA 容器两侧验证挑战路径：
 
 ```bash
+sudo nginx -t && sudo systemctl reload nginx
 echo acme-ok | sudo tee <ACME_WEBROOT>/.well-known/acme-challenge/test >/dev/null
 curl http://<SERVICE_DOMAIN>/.well-known/acme-challenge/test
 sudo docker exec <CA_CONTAINER> wget -qO- \
@@ -220,13 +225,11 @@ sudo docker exec <CA_CONTAINER> wget -qO- \
 
 ## 使用 Certbot 签发单域名证书
 
-检查并重载 Nginx 后，向私有 ACME 服务申请证书：
+确认挑战路径可达后，向私有 ACME 服务申请证书：
 
 ```bash
-sudo nginx -t
-sudo systemctl reload nginx
-
-sudo certbot certonly \
+sudo env REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
+  certbot certonly \
   --webroot \
   --webroot-path <ACME_WEBROOT> \
   --server https://<CA_DOMAIN>:9443/acme/acme/directory \
@@ -273,7 +276,16 @@ curl --noproxy '*' -I https://<SERVICE_DOMAIN>
 
 ## 配置自动续期
 
-私有 CA 的叶证书通常有效期较短，不应沿用公网 CA 的检查频率。创建部署钩子
+本节以提供 `certbot.service` 和 `certbot.timer` 的发行版软件包为例。先运行 `systemctl cat certbot.service certbot.timer` 确认服务；Snap 等安装方式可能使用其他单元名称，必须对应修改服务与 timer，不能新建一个无人调用的同名单元。
+
+运行 `sudo systemctl edit certbot.service`，为自动续期设置与首次签发相同的信任库：
+
+```ini
+[Service]
+Environment="REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt"
+```
+
+仅在交互式终端设置此变量不会传给 systemd。私有 CA 的叶证书通常有效期较短，不应沿用公网 CA 的检查频率。创建部署钩子
 `/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh`：
 
 ```sh
@@ -303,13 +315,16 @@ sudo systemctl restart certbot.timer
 sudo systemctl enable certbot.timer
 systemctl list-timers certbot.timer
 
-sudo certbot renew --dry-run --run-deploy-hooks \
+sudo env REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
+  certbot renew --dry-run --run-deploy-hooks \
   --server https://<CA_DOMAIN>:9443/acme/acme/directory
 sudo grep '^server' /etc/letsencrypt/renewal/<SERVICE_DOMAIN>.conf
 ```
 
 普通续期会读取已保存的 ACME 地址；模拟续期仍建议显式指定私有 `--server`，避免错误切换到
-公有 ACME 环境。
+公有 ACME 环境。对自定义 CA 使用 `--dry-run` 仍可能签发并丢弃真实证书，不是完全无副作用的离线检查。
+
+最后运行 `systemctl show certbot.service -p Environment`，确认服务已获得 `REQUESTS_CA_BUNDLE`；检查一次自动续期任务的日志，不能只以手工签发成功作为自动续期成功的依据。
 
 ## 让 Windows 和 macOS 信任根 CA
 
@@ -376,8 +391,8 @@ fingerprint 不等同于 Windows 证书管理器显示的 thumbprint。不要从
 ```bash
 sudo dscacheutil -flushcache
 sudo killall -HUP mDNSResponder
-dig <CA_DOMAIN>
-dig <SERVICE_DOMAIN>
+dscacheutil -q host -a name <CA_DOMAIN>
+dscacheutil -q host -a name <SERVICE_DOMAIN>
 ```
 
 通过 Homebrew 安装 `step` 客户端 CLI，再使用独立核对过的 fingerprint 引导。代理环境中可
@@ -386,6 +401,7 @@ dig <SERVICE_DOMAIN>
 ```bash
 brew install step
 env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY \
+  -u http_proxy -u https_proxy -u all_proxy \
   step ca bootstrap \
   --ca-url https://<CA_DOMAIN>:9443 \
   --fingerprint <ROOT_FINGERPRINT> \
@@ -405,14 +421,17 @@ env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY \
 DNS-01 认证方式。完全受控环境也可从 CA 容器内直接签发，但这使用高权限 provisioner，
 只能在受控 CA 主机操作。
 
-创建受控目录后，在容器内签发同时包含裸域和通配符 SAN 的叶证书：
+叶证书和私钥放在现有持久卷的专用目录中；容器重建后仍需用它们续期。创建受控目录后，
+在容器内签发同时包含裸域和通配符 SAN 的叶证书：
 
 ```bash
 sudo install -d -m 700 <NGINX_CERT_DIR>
+sudo docker exec <CA_CONTAINER> mkdir -p /home/step/service-certs
+sudo docker exec <CA_CONTAINER> chmod 700 /home/step/service-certs
 
 sudo docker exec <CA_CONTAINER> step ca certificate "*.<SERVICE_DOMAIN>" \
-  /tmp/service-fullchain.pem \
-  /tmp/service-privkey.pem \
+  /home/step/service-certs/fullchain.pem \
+  /home/step/service-certs/privkey.pem \
   --san "<SERVICE_DOMAIN>" \
   --san "*.<SERVICE_DOMAIN>" \
   --provisioner admin \
@@ -421,9 +440,9 @@ sudo docker exec <CA_CONTAINER> step ca certificate "*.<SERVICE_DOMAIN>" \
   --root /home/step/certs/root_ca.crt \
   --force
 
-sudo docker cp <CA_CONTAINER>:/tmp/service-fullchain.pem \
+sudo docker cp <CA_CONTAINER>:/home/step/service-certs/fullchain.pem \
   <NGINX_CERT_DIR>/fullchain.pem
-sudo docker cp <CA_CONTAINER>:/tmp/service-privkey.pem \
+sudo docker cp <CA_CONTAINER>:/home/step/service-certs/privkey.pem \
   <NGINX_CERT_DIR>/privkey.pem
 sudo chmod 600 <NGINX_CERT_DIR>/privkey.pem
 ```
@@ -440,15 +459,17 @@ ssl_certificate_key <NGINX_CERT_DIR>/privkey.pem;
 
 ```bash
 sudo docker exec <CA_CONTAINER> \
-  step certificate inspect /tmp/service-fullchain.pem --short
-openssl x509 -in <NGINX_CERT_DIR>/fullchain.pem -noout -ext subjectAltName
+  step certificate inspect /home/step/service-certs/fullchain.pem --short
+sudo openssl x509 -in <NGINX_CERT_DIR>/fullchain.pem -noout -ext subjectAltName
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
 ### 自动续期通配符证书
 
-将以下 systemd 服务中的占位符替换为真实、受控的工作目录、容器名和证书目录。`--force` 允许
-非交互覆盖文件；重载前的 `nginx -t` 是必要保护。
+将以下 systemd 服务中的 `<CA_WORKDIR>` 替换为含 `compose.yaml` 的目录，
+`<NGINX_CERT_DIR>` 与首次部署保持一致。续期先更新持久卷中的证书，再复制到 Nginx 目录；仅重载 Nginx 不会更新
+此前复制到宿主机的文件。`--force` 允许非交互覆盖证书；私钥保持不变。
+重载前的 `nginx -t` 是必要保护。
 
 ```ini
 [Unit]
@@ -460,9 +481,13 @@ Requires=docker.service
 [Service]
 Type=oneshot
 WorkingDirectory=<CA_WORKDIR>
-ExecStart=/usr/bin/docker compose exec -T <CA_CONTAINER> step ca renew --force --expires-in 8h --ca-url https://localhost:9000 --root /home/step/certs/root_ca.crt <CONTAINER_CERT_PATH>/fullchain.pem <CONTAINER_CERT_PATH>/privkey.pem
+ExecStart=/usr/bin/docker compose exec -T step-ca step ca renew --force --expires-in 8h --ca-url https://localhost:9000 --root /home/step/certs/root_ca.crt /home/step/service-certs/fullchain.pem /home/step/service-certs/privkey.pem
+ExecStartPost=/usr/bin/docker compose cp step-ca:/home/step/service-certs/fullchain.pem <NGINX_CERT_DIR>/fullchain.pem
 ExecStartPost=/bin/sh -c '/usr/sbin/nginx -t >/dev/null 2>&1 && /usr/bin/systemctl reload nginx'
 ```
+
+用 `command -v docker nginx systemctl` 核对上述可执行文件路径。若任一步骤失败，应先处理
+错误；证书已经过期时，需要重新签发并部署，不能假设默认策略允许过期续期。
 
 配套 timer 每六小时检查一次：
 
@@ -525,3 +550,10 @@ dns:
 加密备份 step-ca 数据卷和密码文件，包括 CA 的证书、配置、数据库与密钥材料；限制备份读取
 权限，并在隔离环境演练恢复。根 CA 私钥丢失或怀疑泄露时，必须建立新 CA、重新签发服务器
 证书，并在所有客户端替换受信任的根证书；仅重新签发服务器证书不能恢复安全边界。
+
+## 参考资料
+
+- [Docker Compose exec：按服务名执行](https://docs.docker.com/reference/cli/docker/compose/exec/)
+- [Smallstep：证书续期](https://smallstep.com/docs/step-cli/reference/ca/renew/)
+
+- [Certbot：更换 ACME 服务与私有 CA 信任](https://eff-certbot.readthedocs.io/en/stable/using.html#changing-the-acme-server)

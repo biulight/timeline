@@ -31,7 +31,7 @@ tags: [Shine, ZeroTier, Proxy, Troubleshooting]
 在已经启用终端代理的 shell 中执行：
 
 ```bash
-curl http://<PRIVATE_HOST>
+curl http://service.home.example.internal
 curl http://192.168.0.10:8080
 ```
 
@@ -54,7 +54,7 @@ curl http://192.168.0.10:8080
 env | rg '^(HTTP_PROXY|HTTPS_PROXY|NO_PROXY|http_proxy|https_proxy|no_proxy)='
 ```
 
-只要 `HTTP_PROXY` / `HTTPS_PROXY` 已设置，而 `NO_PROXY` / `no_proxy` 没有覆盖私有域名后缀和局域网地址段，这些请求仍会走代理。
+对于 curl，HTTP 代理使用小写 `http_proxy`（它忽略大写 `HTTP_PROXY`），HTTPS 可使用 `https_proxy` / `HTTPS_PROXY`。若有效代理变量已设置，而 `NO_PROXY` / `no_proxy` 没有覆盖私有域名后缀和局域网地址段，这些请求仍会走代理。
 
 这也是 ZeroTier 场景里很容易忽略的一点：
 
@@ -82,6 +82,8 @@ shine info shell/proxy
 shine env set PROXY_NO_PROXY \
   'localhost,127.0.0.1,::1,.home.example.internal,192.168.0.0/16' --global
 ```
+
+curl 对 CIDR 排除项的支持始于 7.86.0；较旧版本或其他工具可能需要逐个列出目标 IP。域名后缀和网络地址都要替换为自己的值。详见 [curl 代理环境变量说明](https://everything.curl.dev/usingcurl/proxies/env.html)。
 
 这里至少建议覆盖：
 
@@ -113,7 +115,7 @@ env | rg '^(HTTP_PROXY|HTTPS_PROXY|NO_PROXY|http_proxy|https_proxy|no_proxy)='
 再分别验证私有域名和局域网地址：
 
 ```bash
-curl http://<PRIVATE_HOST>
+curl http://service.home.example.internal
 curl http://192.168.0.10:8080
 ```
 

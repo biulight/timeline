@@ -67,12 +67,18 @@ auth-dir: "~/.cli-proxy-api"
 
 ## 2. 配置本地代理认证
 
-打开 CLIProxyAPI 的配置文件，确认 `api-keys` 只包含你实际使用的 key：
+以下配置适用于直接在本机运行的 CLIProxyAPI（包括 Homebrew 服务）。显式绑定回环地址，
+并确认 `api-keys` 只包含你实际使用的 key：
 
 ```yaml
+host: "127.0.0.1"
+port: 8317
 api-keys:
   - "<LOCAL_PROXY_API_KEY>"
 ```
+
+默认空 `host` 会监听所有网络接口；仅在客户端 URL 中写 `127.0.0.1` 不会限制服务器监听范围。
+容器部署应按上游文档配置容器内监听，并将宿主机端口仅发布到回环地址。
 
 不要保留 `your-api-key-1`、`your-api-key-2` 等示例值。部分 CLIProxyAPI 版本会把它们
 视为不安全的模板 key，并禁用 `/v1/*` 端点，返回：
@@ -118,7 +124,7 @@ curl -fsS \
 
 ```bash
 export ANTHROPIC_BASE_URL=http://127.0.0.1:8317
-export ANTHROPIC_AUTH_TOKEN=<LOCAL_PROXY_API_KEY>
+export ANTHROPIC_AUTH_TOKEN='<LOCAL_PROXY_API_KEY>'
 
 export ANTHROPIC_DEFAULT_OPUS_MODEL=gpt-5.6-sol
 export ANTHROPIC_DEFAULT_SONNET_MODEL=gpt-5.6-terra
@@ -152,8 +158,11 @@ Claude Code -> CLIProxyAPI -> Codex OAuth -> GPT
 
 ```bash
 env |
-  rg '^(ANTHROPIC_BASE_URL|ANTHROPIC_AUTH_TOKEN|ANTHROPIC_DEFAULT_(OPUS|SONNET|HAIKU)_MODEL)='
+  rg '^(ANTHROPIC_BASE_URL|ANTHROPIC_DEFAULT_(OPUS|SONNET|HAIKU)_MODEL)='
+test -n "${ANTHROPIC_AUTH_TOKEN:-}" && echo 'ANTHROPIC_AUTH_TOKEN is set'
 ```
+
+上面的检查只报告认证变量是否非空，不打印 API key。
 
 然后直接使用前面的 `claude -p` 命令测试，不要执行 `claude auth login`。如果变量在另一个
 终端、脚本或 shell 配置中设置，当前 Claude Code 进程不会自动继承。
@@ -166,6 +175,8 @@ env |
   的本地 API key、Codex OAuth 凭据、上游网络和模型列表。
 
 ## 相关内容
+
+- [CLIProxyAPI：基础配置与监听地址](https://help.router-for.me/configuration/basic)
 
 - [CLIProxyAPI：Codex（OpenAI via OAuth）](https://help.router-for.me/configuration/provider/codex)
 - [Anthropic：LLM gateway configuration](https://docs.anthropic.com/en/docs/claude-code/llm-gateway)

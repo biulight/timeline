@@ -102,12 +102,12 @@ docker compose ps
 ## 让设备加入自建网络
 
 先从 [ZeroTier 下载页](https://www.zerotier.com/download/)安装适合当前平台的客户端，
-再把刚下载的 `planet` 文件复制到各平台的数据目录。覆盖前保留原文件，以便回退。
+再把刚下载的 `planet` 文件复制到各平台的数据目录。覆盖前保留原文件，以便回退。下面的 `cp -n` 不覆盖已有备份；首次执行须确认备份成功，重跑时须先确认已有 `planet.backup` 确实是要保留的原件，不确定时使用另一个备份文件名，再继续替换。
 
 ### Ubuntu
 
 ```bash
-sudo cp /var/lib/zerotier-one/planet /var/lib/zerotier-one/planet.backup
+sudo cp -n /var/lib/zerotier-one/planet /var/lib/zerotier-one/planet.backup
 sudo cp <DOWNLOADED_PLANET_PATH> /var/lib/zerotier-one/planet
 sudo systemctl restart zerotier-one
 sudo zerotier-cli join <ZEROTIER_NETWORK_ID>
@@ -116,7 +116,7 @@ sudo zerotier-cli join <ZEROTIER_NETWORK_ID>
 ### macOS
 
 ```bash
-sudo cp "/Library/Application Support/ZeroTier/One/planet" \
+sudo cp -n "/Library/Application Support/ZeroTier/One/planet" \
   "/Library/Application Support/ZeroTier/One/planet.backup"
 sudo cp <DOWNLOADED_PLANET_PATH> \
   "/Library/Application Support/ZeroTier/One/planet"
@@ -143,7 +143,7 @@ zerotier-cli peers
 zerotier-cli listnetworks
 ```
 
-Windows 使用 `zerotier-cli.bat`。`peers` 应出现角色为 `PLANET` 的自建节点；
+Windows 使用管理员终端中的 `zerotier-cli.bat`。macOS/Linux 若提示无法读取 `authtoken.secret`，请使用 `sudo zerotier-cli peers` 和 `sudo zerotier-cli listnetworks`，不要修改认证文件权限。`peers` 应出现角色为 `PLANET` 的自建节点；
 `listnetworks` 中目标网络应为 `OK`，并显示分配到的 ZeroTier 地址。最后从客户端测试 DNS
 主机的地址：
 
@@ -186,8 +186,8 @@ services:
     command: -conf /etc/coredns/Corefile
     restart: unless-stopped
     ports:
-      - "${DNS_ZEROTIER_IP}:53:53/udp"
-      - "${DNS_ZEROTIER_IP}:53:53/tcp"
+      - "${DNS_ZEROTIER_IP:?set DNS_ZEROTIER_IP}:53:53/udp"
+      - "${DNS_ZEROTIER_IP:?set DNS_ZEROTIER_IP}:53:53/tcp"
     volumes:
       - ./config:/etc/coredns:ro
 ```
@@ -195,7 +195,7 @@ services:
 固定镜像版本可以避免一次普通重启意外拉取不兼容版本。`container_name` 让后续查看日志时更
 直观，但不是功能必需项；如果同一台 Docker 主机要运行多套此配置，可以删除它，让 Compose
 自动生成不冲突的名称。端口映射中的 `${DNS_ZEROTIER_IP}` 不要省略：写成 `53:53` 会绑定
-宿主机所有网络接口，可能把递归 DNS 暴露到公网或物理局域网。
+宿主机所有网络接口，可能把递归 DNS 暴露到公网或物理局域网。这里的 `:?` 还会在 `.env` 遗漏该变量或值为空时直接报错，避免空值展开成全接口绑定。
 
 `Corefile`：
 
@@ -254,16 +254,14 @@ UDP 和 TCP 查询都应返回 `<NAS_ZEROTIER_IP>`。
 
 ### 限制 DNS 的访问范围
 
-端口绑定只控制监听地址，仍应使用云防火墙和宿主机防火墙限制来源。以 UFW 为例，替换
-占位符后执行：
+端口绑定只控制监听地址，仍需限制来源。Docker 发布的容器端口可能绕过 UFW 的普通入站
+规则；仅添加 `ufw allow from ...` 不能证明其他来源已被拒绝。应按 Docker 当前使用的
+防火墙后端配置转发过滤：iptables 后端使用 `DOCKER-USER`，nftables 后端采用对应规则。
+具体配置见 [Docker 防火墙说明](https://docs.docker.com/engine/network/packet-filtering-firewalls/)。
 
-```bash
-sudo ufw allow from <ZEROTIER_CIDR> to <DNS_ZEROTIER_IP> port 53 proto udp
-sudo ufw allow from <ZEROTIER_CIDR> to <DNS_ZEROTIER_IP> port 53 proto tcp
-```
-
-不要为 53 端口添加任意公网来源规则。若 CoreDNS 主机同时有公网地址，还应从公网侧验证
-该地址的 53 端口不可达，避免成为开放递归 DNS。
+保持端口只绑定 DNS 主机的 ZeroTier 地址，并根据网络策略仅允许 `<ZEROTIER_CIDR>` 中的
+客户端查询。从允许和不允许的来源分别验证 UDP/TCP 53；若主机同时有公网地址，还应从
+公网侧验证该地址的 53 端口不可达，避免成为开放递归 DNS。
 
 ## 使用 Shine 应用 Split-DNS
 

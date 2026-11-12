@@ -79,8 +79,8 @@ gpg --list-keys --keyid-format long
 gpg --list-secret-keys --keyid-format long
 ```
 
-最后一条命令显示 `sec#` 或 `ssb>` 并不表示私钥被复制到了电脑；它通常表示本地保存了
-指向智能卡的 stub。核对公钥指纹与 `gpg --card-status` 显示的密钥一致。
+最后一条命令中，`sec#` 表示该主密钥的私钥不可用，`ssb>` 表示子密钥位于智能卡上；
+这些标记不表示设备中的私钥被复制到了电脑。核对公钥指纹与 `gpg --card-status` 显示的密钥一致。
 
 如果公钥来自文件以外的渠道，必须通过可信渠道核对完整指纹后再使用。
 

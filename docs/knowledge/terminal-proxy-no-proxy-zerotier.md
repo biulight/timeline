@@ -13,7 +13,7 @@ sidebar_position: 4
 
 你可能会看到下面这些现象：
 
-- `curl http://<PRIVATE_HOST>` 没有直连私网目标，而是进入本地 HTTP 代理链路；
+- `curl http://service.home.example.internal` 没有直连私网目标，而是进入本地 HTTP 代理链路；
 - `curl http://192.168.0.10:8080` 也被同一套代理接管；
 - 浏览器或其他客户端能够访问，但同一台机器上的 CLI 工具失败；
 - 代理软件日志中出现本不该经过代理的内网请求。
@@ -26,7 +26,7 @@ sidebar_position: 4
 
 最常见的原因有四类：
 
-1. 当前 shell 已设置 `HTTP_PROXY` 或 `HTTPS_PROXY`。
+1. 当前 shell 已设置当前工具识别的 HTTP/HTTPS 代理变量，或兜底代理 `ALL_PROXY` / `all_proxy`。
 2. `NO_PROXY` / `no_proxy` 没有覆盖私有域名后缀，例如 `.home.example.internal`。
 3. `NO_PROXY` / `no_proxy` 没有覆盖局域网地址段，例如 `192.168.0.0/16`。
 4. Shine 中保存的 `PROXY_NO_PROXY` 已修改，但当前 shell 仍在使用旧的 `proxy` 预设内容，或终端还没有重新加载。
@@ -46,10 +46,12 @@ sidebar_position: 4
 ### 1. 检查当前 shell 的代理变量
 
 ```bash
-env | rg '^(HTTP_PROXY|HTTPS_PROXY|NO_PROXY|http_proxy|https_proxy|no_proxy)='
+env | rg '^(HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|NO_PROXY|http_proxy|https_proxy|all_proxy|no_proxy)='
 ```
 
-如果输出中已经设置了 `HTTP_PROXY` / `HTTPS_PROXY`，但 `NO_PROXY` / `no_proxy` 里没有你的私有域名后缀或局域网地址段，就能基本确认问题方向。
+curl 的 HTTP 代理只读取小写 `http_proxy`；HTTPS 可读取 `https_proxy` / `HTTPS_PROXY`。未设置对应协议代理时，还可能使用 `all_proxy` / `ALL_PROXY`。
+代理 URL 可能包含用户名和密码，分享诊断输出前请移除这些凭据。
+如果输出中已经设置了对应代理变量，但 `NO_PROXY` / `no_proxy` 里没有你的私有域名后缀或局域网地址段，就能基本确认问题方向。
 
 ### 2. 检查 Shine 中维护的代理排除列表
 
@@ -85,6 +87,8 @@ shine env set PROXY_NO_PROXY \
 - 局域网地址段：例如 `192.168.0.0/16`
 
 如果你有多个私有后缀或多个地址段，可以继续追加到同一串逗号分隔值中。
+CIDR 网段写法要求 curl 7.86.0 或更高版本；其他客户端未必支持。旧版 curl 或不支持 CIDR
+的工具应列出具体 IP 或域名，并分别验证。域名 URL 仍应按域名添加绕过规则，不能只依赖解析后的 IP 网段。
 `--global` 将设置保存在本机全局配置。全局 env 文件或项目中的同名值仍可能覆盖它，
 用 `shine env explain PROXY_NO_PROXY` 确认实际生效来源。
 
@@ -115,13 +119,13 @@ setproxy
 
 ```bash
 shine info shell/proxy
-env | rg '^(HTTP_PROXY|HTTPS_PROXY|NO_PROXY|http_proxy|https_proxy|no_proxy)='
+env | rg '^(HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|NO_PROXY|http_proxy|https_proxy|all_proxy|no_proxy)='
 ```
 
 再分别测试私有域名和局域网地址：
 
 ```bash
-curl http://<PRIVATE_HOST>
+curl http://service.home.example.internal
 curl http://192.168.0.10:8080
 ```
 
@@ -139,7 +143,7 @@ curl http://192.168.0.10:8080
 shine --version
 shine env list
 shine info shell/proxy
-env | rg '^(HTTP_PROXY|HTTPS_PROXY|NO_PROXY|http_proxy|https_proxy|no_proxy)='
+env | rg '^(HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|NO_PROXY|http_proxy|https_proxy|all_proxy|no_proxy)='
 ```
 
 重点区分两类问题：
@@ -150,3 +154,5 @@ env | rg '^(HTTP_PROXY|HTTPS_PROXY|NO_PROXY|http_proxy|https_proxy|no_proxy)='
 若你是在阅读一篇踩坑记录后找到这里，也可以回看对应博客，了解这个问题在真实使用中的表现方式：
 
 - [终端代理没有排除 ZeroTier 私有域名，结果请求被本地代理拦截](/blog/terminal-proxy-no-proxy-zerotier)
+
+- [curl：NO_PROXY 与 CIDR 支持](https://curl.se/libcurl/c/CURLOPT_NOPROXY.html)
