@@ -2,7 +2,7 @@ name: Check Documentation
 
 on:
   pull_request:
-    branches: [main]
+    branches: [dev, main]
   workflow_dispatch:
 
 permissions:

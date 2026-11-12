@@ -3,5 +3,5 @@
   "extends": [
     "config:recommended"
   ],
-  "baseBranchPatterns": ["main"]
+  "baseBranchPatterns": ["dev"]
 }
