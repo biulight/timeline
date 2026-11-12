@@ -9,7 +9,7 @@ on:
 permissions:
   contents: read
 
-# Serialize both deployment targets; never cancel a deployment already in progress.
+# Serialize server and Pages deployments; never cancel a deployment already in progress.
 concurrency:
   group: deployment-prod
   cancel-in-progress: false
@@ -110,6 +110,7 @@ jobs:
     needs: [preflight, build]
     runs-on: ubuntu-latest
     environment: prod
+    # prod.DEPLOY_SERVERS currently contains only the blog.biulight.top server.
     strategy:
       fail-fast: false
       max-parallel: 2
