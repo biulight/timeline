@@ -69,12 +69,12 @@ jobs:
       - name: Build
         run: pnpm build
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v5
         with:
           path: build/
           retention-days: 2
       - name: Upload server artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: build-dist
           path: build/
@@ -104,7 +104,7 @@ jobs:
           fi
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
   deploy:
     needs: [preflight, build]
@@ -117,7 +117,7 @@ jobs:
         server: ${{ fromJson(needs.preflight.outputs.servers) }}
     steps:
       - name: Download server artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           name: build-dist
           path: build
@@ -137,7 +137,7 @@ jobs:
             exit 1
           fi
       - name: Deploy to server
-        uses: easingthemes/ssh-deploy@v5.1.1
+        uses: easingthemes/ssh-deploy@v5.1.2
         with:
           SSH_PRIVATE_KEY: ${{ secrets.ALY_SSH_TOKEN }}
           REMOTE_HOST: ${{ matrix.server.host }}
