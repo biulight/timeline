@@ -22,11 +22,11 @@ tags: [Linux, Docker, QNAP]
 
 ```bash
 # 远程登录
-ssh -p 22 username@192.168.0.155
+ssh -p 22 username@nas.example.internal
 ```
 
 :::tip
-SSH 服务的默认端口是 22，上述命令是 用户通过 SSH 工具用账号（username）连接到服务器（192.168.0.155）的 22 端口
+SSH 服务的默认端口是 22，上述命令是 用户通过 SSH 工具用账号（username）连接到服务器（请将 `nas.example.internal` 替换为自己的 NAS 地址）的 22 端口
 :::
 
 2. 增加 docker 的代理配置
@@ -36,14 +36,13 @@ SSH 服务的默认端口是 22，上述命令是 用户通过 SSH 工具用账�
 sudo vim /share/CACHEDEV1_DATA/.qpkg/container-station/etc/docker.json
 ```
 
-增加代理配置
+修改前备份配置，保留已有字段并合并下面的 `proxies`，不要覆盖整个文件。示例是标准 JSON，不支持注释。配置位置因 Container Station 版本和存储卷可能不同，请先确认实际使用路径；代理字段支持以当前 Docker Engine 版本及 [Docker 官方说明](https://docs.docker.com/engine/daemon/proxy/)为准。
 
 ```json title="/share/CACHEDEV1_DATA/.qpkg/container-station/etc/docker.json"
 {
-  // 新增配置
   "proxies": {
-    "http-proxy": "http://代理地址:端口",
-    "https-proxy": "http://代理地址:端口",
+    "http-proxy": "http://proxy.example.com:3128",
+    "https-proxy": "http://proxy.example.com:3128",
     "no-proxy": "*.test.example.com,.example.org,127.0.0.0/8"
   }
 }
@@ -53,7 +52,9 @@ sudo vim /share/CACHEDEV1_DATA/.qpkg/container-station/etc/docker.json
 ssh 登录后，可以通过 `which docker`、`whereis docker` 查看 docker 所在位置
 :::
 
-3. 重启 docker 服务
+3. 重启 Docker 服务
+
+重启 Container Station 会中断运行中的容器，请在维护窗口操作。若启动失败，恢复修改前的配置再重启。
 
 ```bash
 sudo /etc/init.d/container-station.sh restart
@@ -65,44 +66,22 @@ sudo /etc/init.d/container-station.sh restart
 docker info
 ```
 
-如下图：
-![代理设置成功](./docker-info.jpg)
+检查输出中的 HTTP Proxy 和 HTTPS Proxy 是否符合预期。分享输出前请移除主机、网络地址和可能包含凭据的代理 URL。
 
 完成上述设置后，你就可以愉快的拉取镜像了
 
 ### 更换国内镜像源
 
-> 参考**使用代理**，增加镜像源配置
+> 参考**使用代理**，仅使用自己管理或已确认可信、当前可访问的镜像服务。下面的地址是占位符，不能直接拉取镜像：
 
-步骤 1、2 参考[使用代理](#使用代理)
-
-```
-# 编辑配置文件
-sudo vim /share/CACHEDEV1_DATA/.qpkg/container-station/etc/docker.json
-```
-
-增加镜像源配置
-
-```json title="/share/CACHEDEV1_DATA/.qpkg/container-station/etc/docker.json"
+```json
 {
-  // 新增配置
   "registry-mirrors": [
-    "https://mirror.ccs.tencentyun.com",
-    "https://docker.mirrors.ustc.edu.cn"
+    "https://mirror.example.com"
   ]
 }
 ```
 
-:::info
-腾讯云镜像加速器地址：https://mirror.ccs.tencentyun.com
+将该字段合并到原配置中，不要覆盖上一步的 `proxies` 或其他配置。旧文章中流传的公共镜像地址可能已经停服、限制来源网络或变更服务范围，应以服务提供方当前说明为准。
 
-中国科学技术大学：https://docker.mirrors.ustc.edu.cn
-
-Docker 官方镜像（中国区）镜像加速：https://registry.docker-cn.com
-
-网易云镜像加速器地址：http://hub-mirror.c.163.com
-
-南京大学镜像加速器地址：https://docker.nju.edu.cn
-:::
-
-剩余步骤参考[使用代理](#使用代理)
+剩余步骤参考[使用代理](#使用代理)。

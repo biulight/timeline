@@ -30,7 +30,7 @@ tags: [git, ssh, github]
 
 ### 准备工作
 
-- 准备一个新的github账号(biulight)
+- 准备一个新的 GitHub 账号（下文使用 `work-account` 占位）
 
 - bash/zsh环境
 
@@ -40,36 +40,36 @@ tags: [git, ssh, github]
 
 1. 打开终端，生成新的SSH Key
 ```bash
-cd ~/.ssh
-ssh-keygen -m PEM -t rsa -b 4096 -f biulight -C "biulight007@gmail.com"
+mkdir -p ~/.ssh
+ssh-keygen -t ed25519 -f ~/.ssh/github_work -C "work@example.com"
 ```
 
 :::tip
-1. 上述命令会在当前目录下生成两个文件biulight, biulight.pub , 因此一般会选择在 `~/.ssh` 目录下
+1. 上述命令会在 `~/.ssh` 下生成两个文件 `github_work`、`github_work.pub` , 因此一般会选择在 `~/.ssh` 目录下
 2. 后缀`.pub`的文件为公钥文件，没有后缀的为私钥文件。
-3. 可以通过 `ssh-keygen --help` 查看对应命令信息。
+3. 可以通过 `man ssh-keygen` 查看选项。若目标文件已存在，不要覆盖仍在使用的密钥。
 :::
 
-2. 把biulight.pub里面的内容复制到新准备的github账户（biulight）中对应的位置
+2. 把 `~/.ssh/github_work.pub` 的内容添加到新 GitHub 账号的 SSH keys；只复制 `.pub` 公钥。
 
 3. 再次打开终端，编辑 `~/.ssh/config` 文件
 
 在该文件中新增以下内容
 ```bash
-# biulight登录信息
-Host biulight # 别名（可以随便起）
-HostName github.com # 访问的真实地址
-PreferredAuthentications publickey # 配置登录用什么权限验证
-IdentityFile ~/.ssh/biulight  # 私钥文件(证书所在的位置)
+Host github-work
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/github_work
+    IdentitiesOnly yes
 ```
 
 关键在于Host与HostName的区别：
 - HostName: 填写真实的服务地址（如：访问github，填写github.com）
-- Host: 填写别名，后续会用上（如：通过ssh拉取github代码）
+- Host: 填写别名，后续会用上（例如 `github-work`，通过它选择对应配置）
 
 :::tip
 `~/.ssh/config`文件其他配置信息:
-- UserName 登录的用户名(如：git, root)
+- User 登录的用户名(如：git, root)
 - Port 服务器open-ssh端口（默认：22，默认时，一般不写此行）
 :::
 
@@ -77,13 +77,15 @@ IdentityFile ~/.ssh/biulight  # 私钥文件(证书所在的位置)
 
 通常我们在Web页面上复制的SSH URL，可以直接使用，例如：
 ```bash
-git clone git@github.com:biulight/blog.git
+git clone git@github.com:work-account/example-repo.git
 ```
-**但是**，由于现在使用的biulight的秘钥，因此需要修改原有的URL
+**但是**，由于现在需要使用新账号的密钥，因此需要修改原有的URL
 ```bash
-# 用上面配置的HostName替换链接中的 `github.com`
-git clone git@biulight:biulight/blog.git
+# 用上面配置的 Host 别名替换链接中的 github.com
+git clone git@github-work:work-account/example-repo.git
 ```
+
+`IdentitiesOnly yes` 限制 SSH 使用配置中指定的身份，避免 ssh-agent 中的其他账号密钥抢先被接受。完整选项见 [OpenSSH 配置手册](https://man.openbsd.org/ssh_config)。
 
 ### 总结
 
@@ -91,14 +93,10 @@ git clone git@biulight:biulight/blog.git
 
 ## 其他
 
-如果想要进一步区分每个账户提交，可以为仓库设置局部的用户名和邮箱
+如果想要进一步区分每个账户提交，进入对应仓库后设置局部用户名和邮箱即可，无需取消其他仓库使用的全局设置。提交身份和 SSH 登录账号分别配置。
 ```bash
-# 取消全局 用户名/邮箱 配置
-git config --global --unset user.name
-git config --global --unset user.email
-
 # 单独为每个repo设置 用户名/邮箱
 git config user.name "xxx01"
-git config user.email "xxx01@gmail.com"
+git config user.email "work@example.com"
 ```
 

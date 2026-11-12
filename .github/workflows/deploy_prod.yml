@@ -1,300 +1,172 @@
 name: Deploy Production
+run-name: Deploy ${{ github.sha }} by @${{ github.actor }}
+
 on:
-  workflow_dispatch:
-    inputs:
-      node_version:
-        description: 'Node.js version'
-        required: false
-        default: '22.18.0'
-        type: string
   push:
-    branches:
-      - release
+    branches: [main]
+  workflow_dispatch:
 
-# 最小必要权限（根级），尽量收窄为后续步骤需要的权限
 permissions:
-  contents: write       # 推送 tag、创建 release、checkout/push 操作
-  pages: write          # deploy-pages / upload-pages-artifact
-  id-token: write       # deploy-pages 可能需要 OIDC
-  pull-requests: write  # github-script 创建 PR
+  contents: read
 
+# Serialize both deployment targets; never cancel a deployment already in progress.
 concurrency:
-  group: deployment-prod-${{ github.ref }}
-  cancel-in-progress: true
+  group: deployment-prod
+  cancel-in-progress: false
 
 jobs:
-  # 预检步骤：在任何构建/部署前检测必须的 secrets/vars 是否存在，早失败并提示缺失项
   preflight:
     runs-on: ubuntu-latest
+    environment: prod
     outputs:
-      ready: ${{ steps.check.outputs.ready }}
-    environment:
-      name: prod
+      servers: ${{ steps.check.outputs.servers }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Check version updated for prod deployment
+      - name: Require main branch
         run: |
-          # Get current version from package.json
-          CURRENT_VERSION=$(jq -r '.version' package.json)
-          echo "Current version: $CURRENT_VERSION"
-
-          # Get the latest tag version
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "none")
-          echo "Latest tag: $LATEST_TAG"
-
-          # Extract version from latest tag (assuming format like v1.2.3 or 1.2.3)
-          if [ "$LATEST_TAG" != "none" ]; then
-            LATEST_VERSION=$(echo "$LATEST_TAG" | sed 's/^v//' | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' || echo "0.0.0")
-          else
-            LATEST_VERSION="0.0.0"
-          fi
-          echo "Latest version: $LATEST_VERSION"
-
-          # Compare versions using semantic versioning
-          if [ "$CURRENT_VERSION" = "$LATEST_VERSION" ]; then
-            echo "::error::Version in package.json ($CURRENT_VERSION) has not been updated. Please bump the version before deploying to prod."
+          if [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "::error::Production deployments must run from main"
             exit 1
           fi
-          # Check if CURRENT_VERSION is greater than LATEST_VERSION
-          if [ "$(printf '%s\n' "$LATEST_VERSION" "$CURRENT_VERSION" | sort -V | head -n1)" != "$LATEST_VERSION" ]; then
-            echo "::error::Version in package.json ($CURRENT_VERSION) is less than the latest released version ($LATEST_VERSION). Please bump the version before deploying to prod."
-            exit 1
-          fi
-
-          echo "✅ Version check passed: $LATEST_VERSION -> $CURRENT_VERSION"
-
-      - name: Check required secrets and variables
+      - name: Check deployment configuration
         id: check
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.ALY_SSH_TOKEN }}
+          SERVERS: ${{ vars.DEPLOY_SERVERS }}
         run: |
-          missing=""
-          # Check SSH secret for server deploy
-          if [ -z "${{ secrets.ALY_SSH_TOKEN }}" ]; then
-            missing="${missing} secrets.ALY_SSH_TOKEN"
-          fi
-
-          # Check DEPLOY_SERVERS variable
-          if [ -z "${{ vars.DEPLOY_SERVERS }}" ]; then
-            missing="${missing} vars.DEPLOY_SERVERS"
-          fi
-
-          # If Pages deployment will run (only for workflow_dispatch + prod), we don't require extra secrets here.
-          # Emit helpful guidance and fail early if any required items missing.
-          if [ -n "$missing" ]; then
-            echo "Missing required configuration:$missing"
-            echo "::error::Missing required configuration:$missing"
+          if [ -z "$SSH_PRIVATE_KEY" ]; then
+            echo "::error::Missing secrets.ALY_SSH_TOKEN"
             exit 1
           fi
-
-          echo "All required secrets/vars present."
-          echo "ready=true" >> $GITHUB_OUTPUT
+          if ! jq -se '
+            length == 1 and (.[0] |
+            type == "array" and length > 0 and
+            all(.[];
+              type == "object" and
+              (.host | type == "string" and length > 0) and
+              (.user | type == "string" and length > 0)
+            ))
+          ' <<< "$SERVERS" > /dev/null; then
+            echo "::error::DEPLOY_SERVERS must be a non-empty JSON array of objects with host and user strings"
+            exit 1
+          fi
+          echo "servers=$(jq -c . <<< "$SERVERS")" >> "$GITHUB_OUTPUT"
 
   build:
     needs: preflight
     runs-on: ubuntu-latest
-    env:
-      NODE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.node_version || '22.18.0' }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Cache node_modules
-        uses: actions/cache@v5
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-
-      - name: Install deps
-        run: npm install
-
+          node-version: '22.18.0'
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
       - name: Build
-        run: npm run build
-
-      - name: Upload static files as artifact for Pages
-        id: pages_artifact
+        run: pnpm build
+      - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
         with:
           path: build/
-
-      - name: Upload build artifact (for SSH deploy)
+          retention-days: 2
+      - name: Upload server artifact
         uses: actions/upload-artifact@v7
         with:
-          retention-days: 2
           name: build-dist
           path: build/
-
-  prepare-deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: prod
-    outputs:
-      servers: ${{ steps.set-matrix.outputs.servers }}
-    steps:
-      - name: Set deploy servers matrix
-        id: set-matrix
-        env:
-          SERVERS: ${{ vars.DEPLOY_SERVERS }}
-        run: |
-          echo "servers=$SERVERS" >> $GITHUB_OUTPUT
+          retention-days: 2
+          if-no-files-found: error
 
   deploy-pages:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # Re-running old jobs must not restore an obsolete site over main.
+      - name: Require current main commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CURRENT_SHA=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+          if [ "$CURRENT_SHA" != "$GITHUB_SHA" ]; then
+            echo "::error::This run is no longer main HEAD. Start a new Deploy Production run from main."
+            exit 1
+          fi
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
 
   deploy:
-    needs: prepare-deploy
-    runs-on: [self-hosted, deploy-prod] # Use a dedicated label for secure deployment runner
-    environment:
-      name: prod
-    permissions: # Scope permissions as narrowly as possible
-      contents: read
-      id-token: write
-      actions: read
+    needs: [preflight, build]
+    runs-on: ubuntu-latest
+    environment: prod
     strategy:
-      fail-fast: true
+      fail-fast: false
       max-parallel: 2
       matrix:
-        server: ${{ fromJson(needs.prepare-deploy.outputs.servers) }}
+        server: ${{ fromJson(needs.preflight.outputs.servers) }}
     steps:
-      - name: Verify runner security and dependencies
-        run: |
-          echo "Verifying runner security and dependencies..."
-          # Check for required tools
-          which ssh || (echo "ssh not found" && exit 1)
-          which rsync || (echo "rsync not found" && exit 1)
-          # Optionally check for OS updates
-          # sudo apt-get update -y
-          # sudo apt-get upgrade -y
-          echo "Runner verification complete."
-      - name: Download build artifact for SSH deploy
+      - name: Download server artifact
         uses: actions/download-artifact@v8
         with:
           name: build-dist
           path: build
-
-      - name: SSH deploy to server
+      - name: Verify artifact and deployment tools
+        run: |
+          test -s build/index.html
+          command -v ssh
+          command -v rsync
+      # Re-running old jobs must not restore an obsolete site over main.
+      - name: Require current main commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CURRENT_SHA=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+          if [ "$CURRENT_SHA" != "$GITHUB_SHA" ]; then
+            echo "::error::This run is no longer main HEAD. Start a new Deploy Production run from main."
+            exit 1
+          fi
+      - name: Deploy to server
         uses: easingthemes/ssh-deploy@v5.1.2
-        env:
-          REMOTE_USER: ${{ matrix.server.user }}
-          REMOTE_HOST: ${{ matrix.server.host }}
-          REMOTE_PORT: "22"
-          ARGS: "-rltgoDzvO --delete"
+        with:
           SSH_PRIVATE_KEY: ${{ secrets.ALY_SSH_TOKEN }}
-          SOURCE: "build/*"
-          TARGET: "/var/www/timeline"
+          REMOTE_HOST: ${{ matrix.server.host }}
+          REMOTE_USER: ${{ matrix.server.user }}
+          REMOTE_PORT: '22'
+          ARGS: '-rltgoDzvO --delete'
+          SOURCE: 'build/'
+          TARGET: '/var/www/timeline'
 
-  tag-and-release:
-    needs: [deploy, deploy-pages]
-    if: ${{ !cancelled() && needs.deploy.result == 'success' }}
+  deployment-result:
+    if: always() && github.ref == 'refs/heads/main'
+    needs: [preflight, build, deploy, deploy-pages]
     runs-on: ubuntu-latest
-    env:
-      NODE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.node_version || '22.18.0' }}
     steps:
-      - name: Checkout code for tagging
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Create tag
-        id: create_tag
-        run: |
-          set -e
-          # Get version from package.json
-          VERSION=$(jq -r '.version' package.json)
-          echo "Version from package.json: $VERSION"
-
-          # Create tag name with version
-          TAG="v${VERSION}"
-          echo "TAG_NAME=$TAG" >> $GITHUB_ENV
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git tag "$TAG" "$GITHUB_SHA"
-          git push origin "$TAG"
-
-      - name: Setup Node for changelog
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Generate changelog
-        id: gen_changelog
-        run: |
-          npx git-cliff --config git-cliff.toml --latest --strip header --no-exec -o CHANGELOG_TEMP.md
-          echo "changelog<<EOF" >> $GITHUB_OUTPUT
-          cat CHANGELOG_TEMP.md >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+      - name: Check both deployment targets
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Download build artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: build-dist
-          path: build-dist
-
-      - name: Package build artifacts
+          PREFLIGHT_RESULT: ${{ needs.preflight.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          SERVER_RESULT: ${{ needs.deploy.result }}
+          PAGES_RESULT: ${{ needs.deploy-pages.result }}
         run: |
-          cd build-dist
-          tar -czf ../blog-build-${{ env.VERSION }}.tar.gz .
-          zip -r ../blog-build-${{ env.VERSION }}.zip .
-          cd ..
-
-      - name: Create GitHub Release
-        run: |
-          gh release create "${{ env.TAG_NAME }}" \
-            --title "Release ${{ env.VERSION }}" \
-            --notes "${{ steps.gen_changelog.outputs.changelog }}" \
-            --target "$GITHUB_SHA" \
-            blog-build-${{ env.VERSION }}.tar.gz \
-            blog-build-${{ env.VERSION }}.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create PR to merge into main
-        uses: actions/github-script@v9
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const ref = context.ref || '';
-            const branch = ref.replace('refs/heads/', '');
-            if (!branch) {
-              core.info('Cannot determine branch name from context.ref; skipping PR creation.');
-              return;
-            }
-            const { data: existing } = await github.rest.pulls.list({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              head: `${context.repo.owner}:${branch}`,
-              base: 'main'
-            });
-            if (existing.length) { core.info(`PR already exists: #${existing[0].number}`); return; }
-            const { data: pr } = await github.rest.pulls.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              head: branch,
-              base: 'main',
-              title: `chore: merge ${branch} into main (auto after deploy)`,
-              body: 'Auto-created by CI after successful deploy.'
-            });
-            core.notice(`Created PR #${pr.number}`);
+          {
+            echo "### Deployment: $GITHUB_SHA"
+            echo "- Preflight: $PREFLIGHT_RESULT"
+            echo "- Build: $BUILD_RESULT"
+            echo "- Servers: $SERVER_RESULT"
+            echo "- Pages: $PAGES_RESULT"
+          } >> "$GITHUB_STEP_SUMMARY"
+          test "$PREFLIGHT_RESULT" = success
+          test "$BUILD_RESULT" = success
+          test "$SERVER_RESULT" = success
+          test "$PAGES_RESULT" = success
