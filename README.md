@@ -55,18 +55,21 @@ pnpm typecheck
 1. 从 `dev` 创建短期工作分支，将文档修改、功能调整或依赖升级提交为目标为 `dev` 的 PR。Renovate 也向 `dev` 提交依赖更新。
 2. 指向 `dev` 或 `main` 的 PR 都由 `Check Documentation` 执行 `pnpm typecheck` 和 `pnpm build`。合入 `dev` 不触发生产部署。
 3. 准备发布时，创建 `dev` → `main` 的 PR，检查通过并满足审批要求后，以 merge commit 合并，保留两个长期分支的共同历史。
-4. 合入 `main` 后，`Deploy Production` 检查部署配置，再执行相同检查并构建一次。同一份静态站点产物部署到服务器和 GitHub Pages；两边都成功才算发布成功。Actions 运行摘要记录提交 SHA 和部署结果。
+4. 合入 `main` 后，`Deploy Production` 检查部署配置，再执行相同检查并构建一次。同一份静态站点产物部署到 `blog.biulight.top` 对应的服务器和 GitHub Pages；两边都成功才算发布成功。Actions 运行摘要记录提交 SHA 和部署结果。
 5. 发布成功后，创建 `main` → `dev` 的同步 PR。等待 `Typecheck and build` 通过，再以 merge commit 合并；即使没有新的开发内容，也通过 PR 同步发布合并提交，不直接快进推送到受保护的 `dev`。如果 `main` 已被 `dev` 完整包含，则无需重复创建同步 PR。
 
 生产工作流只允许 `main`，也可以在 Actions 中选择 `main` 手动启动新的部署。服务器和 Pages 部署前均核对提交是否仍为 `main` 的最新提交；过期运行会失败，避免重跑旧任务覆盖新内容。Artifact 保留两天，到期自动清理。日常预览使用 `pnpm start`，不再提供 dev / uat 部署。
 
 ### 部署配置
 
-- `prod` Environment：配置 Secret `ALY_SSH_TOKEN` 和 Variable `DEPLOY_SERVERS`。后者为非空 JSON 数组，例如 `[{"host":"web.example.com","user":"deploy"}]`。
+当前部署目标为 [blog.biulight.top/timeline](https://blog.biulight.top/timeline/) 和 [GitHub Pages](https://biulight.github.io/timeline/)。`blog.biulight.cn` 对应的旧服务器已停止接收部署；保留其已有站点文件和 Nginx 配置。
+
+- `prod` Environment：配置 Secret `ALY_SSH_TOKEN` 和 Variable `DEPLOY_SERVERS`。后者保留 JSON 数组格式，但当前只配置 `.top` 对应的一台服务器，例如 `[{"host":"web.example.com","user":"deploy"}]`，不要加入已停用的 `.cn` 节点。工作流按此清单生成服务器部署任务。
+- `ALY_SSH_TOKEN` 是沿用的 Secret 名称，当前用于 `.top` 服务器的 SSH 部署，不代表仍向旧服务器发布；无需因部署目标调整而改名。
 - `github-pages` Environment：允许 `main` 分支部署；仓库 Pages 的构建来源选择 GitHub Actions。
 - 服务器：通过 SSH 22 端口同步到 `/var/www/timeline`。同步带有 `--delete`，会清理目标目录内产物中已不存在的文件，目录不得混放其他业务数据。
 
-生产部署不会被新运行取消；同一时间只执行一次生产工作流，等待中的运行可能被更新的运行取代。服务器仍采用原地同步，没有自动回滚；部分部署失败时，检查各节点及 Pages 的结果，排除故障后从当前 `main` 启动新的部署，不要重跑历史发布任务。需要恢复旧内容时，将对应变更回退后经 PR 合入 `main`，由新提交重新部署。
+生产部署不会被新运行取消；同一时间只执行一次生产工作流，等待中的运行可能被更新的运行取代。服务器仍采用原地同步，没有自动回滚；部分部署失败时，检查 `.top` 服务器及 Pages 的结果，排除故障后从当前 `main` 启动新的部署，不要重跑历史发布任务。需要恢复旧内容时，将对应变更回退后经 PR 合入 `main`，由新提交重新部署。
 
 ### 分支维护
 
